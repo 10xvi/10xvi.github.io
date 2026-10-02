@@ -350,10 +350,9 @@
     </div>
     <script>
         // Guest Area: a cosmetic password screen in front of the page, like the Wix original.
-        // Only a SHA-256 hash of the password is stored here.
+        // Only a SHA-256 hash of the password is stored here. Case and spaces are ignored.
         (function () {
-            var PASSWORD_SHA256 = 'af1cdc90033c6e010a12cff918c1c7a4f41f14a4e73de371c5e5f106456bcbd6';
-            var TECHNICAL_ERROR = 'Looks like there was a technical issue. Please refresh the browser and log in again.';
+            var PASSWORD_SHA256 = '9c000e9da53b61e498a4914c00a7e42e7b2e770b0383b2d19fe253b65764746b';
             var gate = document.getElementById('gate');
             var form = document.getElementById('gate-form');
             var input = document.getElementById('gate-input');
@@ -372,12 +371,46 @@
             Promise.race([fontsReady, new Promise(function (resolve) { setTimeout(resolve, 1000); })])
                 .then(startFade, startFade);
 
+            // Plain-JS SHA-256 (Web Crypto is unavailable over http, e.g. on a custom domain before HTTPS is on).
             function sha256Hex(text) {
-                return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
-                    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
-                        return ('0' + b.toString(16)).slice(-2);
-                    }).join('');
-                });
+                function ror(x, n) { return (x >>> n) | (x << (32 - n)); }
+                var K = [], hash = [], found = 0, candidate = 2, i, j;
+                for (; found < 64; candidate++) {
+                    var isPrime = true;
+                    for (var factor = 2; factor * factor <= candidate; factor++) {
+                        if (candidate % factor === 0) { isPrime = false; break; }
+                    }
+                    if (!isPrime) continue;
+                    if (found < 8) hash[found] = (Math.pow(candidate, 1 / 2) * 4294967296) | 0;
+                    K[found++] = (Math.pow(candidate, 1 / 3) * 4294967296) | 0;
+                }
+
+                var bytes = Array.prototype.slice.call(new TextEncoder().encode(text));
+                var bitLength = bytes.length * 8;
+                bytes.push(0x80);
+                while (bytes.length % 64 !== 56) bytes.push(0);
+                for (i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bitLength >>> (i * 8)) & 0xff);
+
+                var w = [];
+                for (j = 0; j < bytes.length; j += 64) {
+                    for (i = 0; i < 16; i++) {
+                        w[i] = (bytes[j + 4 * i] << 24) | (bytes[j + 4 * i + 1] << 16) | (bytes[j + 4 * i + 2] << 8) | bytes[j + 4 * i + 3];
+                    }
+                    for (i = 16; i < 64; i++) {
+                        var s0 = ror(w[i - 15], 7) ^ ror(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+                        var s1 = ror(w[i - 2], 17) ^ ror(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+                    }
+                    var a = hash[0], b = hash[1], c = hash[2], d = hash[3], e = hash[4], f = hash[5], g = hash[6], h = hash[7];
+                    for (i = 0; i < 64; i++) {
+                        var t1 = (h + (ror(e, 6) ^ ror(e, 11) ^ ror(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+                        var t2 = ((ror(a, 2) ^ ror(a, 13) ^ ror(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+                        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+                    }
+                    hash[0] = (hash[0] + a) | 0; hash[1] = (hash[1] + b) | 0; hash[2] = (hash[2] + c) | 0; hash[3] = (hash[3] + d) | 0;
+                    hash[4] = (hash[4] + e) | 0; hash[5] = (hash[5] + f) | 0; hash[6] = (hash[6] + g) | 0; hash[7] = (hash[7] + h) | 0;
+                }
+                return hash.map(function (x) { return ('0000000' + (x >>> 0).toString(16)).slice(-8); }).join('');
             }
 
             function setError(message) {
@@ -409,16 +442,8 @@
                     setError('Make sure you enter a password.');
                     return;
                 }
-                if (!(window.crypto && crypto.subtle && window.TextEncoder)) {
-                    setError(TECHNICAL_ERROR);
-                    return;
-                }
-                sha256Hex(value).then(function (hash) {
-                    if (hash === PASSWORD_SHA256) unlock();
-                    else setError('Please enter the correct password.');
-                }, function () {
-                    setError(TECHNICAL_ERROR);
-                });
+                if (sha256Hex(value.toLowerCase().replace(/\s+/g, '')) === PASSWORD_SHA256) unlock();
+                else setError('Please enter the correct password.');
             });
 
             input.focus();
