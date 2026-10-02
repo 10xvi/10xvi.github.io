@@ -5,20 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>10X</title>
     <link rel="canonical" href="https://10xvi.github.io/">
-    <meta property="og:title" content="Home | 10X">
+    <meta property="og:title" content="10X">
     <meta property="og:url" content="https://10xvi.github.io/">
     <meta property="og:site_name" content="10X">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Home | 10X">
+    <meta name="twitter:title" content="10X">
     <link rel="icon" type="image/svg+xml" href="assets/logo-mark.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 
     <!-- Guest Area password screen. Cosmetic only: the page content below is public. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Display:wght@700&family=Wix+Madefor+Text:wght@400&display=swap">
+    <link rel="preload" href="assets/fonts/wix-madefor-display-700-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="assets/fonts/wix-madefor-text-400-latin.woff2" as="font" type="font/woff2" crossorigin>
     <style>
+        @font-face {
+            font-family: 'Wix Madefor Display';
+            font-style: normal;
+            font-weight: 700;
+            font-display: block;
+            src: url(assets/fonts/wix-madefor-display-700-latin.woff2) format('woff2');
+        }
+        @font-face {
+            font-family: 'Wix Madefor Text';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url(assets/fonts/wix-madefor-text-400-latin.woff2) format('woff2');
+        }
+
         html.gate-locked, html.gate-locked body { overflow: hidden !important; }
+        /* Keep the page out of sight, focus and the accessibility tree until unlocked (works without JS). */
+        html.gate-locked body > :not(#gate):not(script) { visibility: hidden; }
 
         #gate {
             position: fixed;
@@ -28,8 +46,11 @@
             height: 100%;
             font-size: 1em;
             color: #000;
-            -webkit-font-smoothing: auto;
+            -webkit-font-smoothing: antialiased;
         }
+        #gate ::selection { background-color: Highlight; color: inherit; }
+        #gate :focus { outline: none; }
+        #gate .gate-btn:focus-visible { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #116dff; }
         #gate .gate-bg {
             position: fixed;
             inset: 0;
@@ -45,6 +66,8 @@
             text-align: center;
             animation: gate-fade-in 1s;
         }
+        /* Hold the fade-in until the fonts are ready, so the title doesn't swap fonts mid-fade. */
+        #gate.is-waiting .gate-box { animation-play-state: paused; }
         @keyframes gate-fade-in {
             0% { opacity: 0; }
             to { opacity: 1; }
@@ -325,6 +348,82 @@
             </form>
         </div>
     </div>
+    <script>
+        // Guest Area: a cosmetic password screen in front of the page, like the Wix original.
+        // Only a SHA-256 hash of the password is stored here.
+        (function () {
+            var PASSWORD_SHA256 = 'af1cdc90033c6e010a12cff918c1c7a4f41f14a4e73de371c5e5f106456bcbd6';
+            var TECHNICAL_ERROR = 'Looks like there was a technical issue. Please refresh the browser and log in again.';
+            var gate = document.getElementById('gate');
+            var form = document.getElementById('gate-form');
+            var input = document.getElementById('gate-input');
+            var field = document.getElementById('gate-field');
+            var error = document.getElementById('gate-error');
+
+            // Start the fade-in once the gate fonts have loaded, or after 1s at most.
+            gate.classList.add('is-waiting');
+            var fontsReady = document.fonts && document.fonts.load
+                ? Promise.all([
+                    document.fonts.load("700 48px 'Wix Madefor Display'"),
+                    document.fonts.load("400 16px 'Wix Madefor Text'")
+                ])
+                : Promise.resolve();
+            var startFade = function () { gate.classList.remove('is-waiting'); };
+            Promise.race([fontsReady, new Promise(function (resolve) { setTimeout(resolve, 1000); })])
+                .then(startFade, startFade);
+
+            function sha256Hex(text) {
+                return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
+                    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+                        return ('0' + b.toString(16)).slice(-2);
+                    }).join('');
+                });
+            }
+
+            function setError(message) {
+                error.textContent = message;
+                field.classList.toggle('is-invalid', !!message);
+            }
+
+            function unlock() {
+                gate.remove();
+                document.documentElement.classList.remove('gate-locked');
+                document.title = 'Home | 10X';
+                // The scrollbar only appears now; let the page's resize handlers (the hero canvas) re-measure.
+                window.dispatchEvent(new Event('resize'));
+                var id = location.hash.slice(1);
+                try { id = decodeURIComponent(id); } catch (e) {}
+                var target = id && document.getElementById(id);
+                if (target) target.scrollIntoView();
+            }
+
+            // Like Wix, the message goes away as soon as the visitor starts typing again.
+            input.addEventListener('input', function () {
+                if (error.textContent) setError('');
+            });
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var value = input.value;
+                if (!value) {
+                    setError('Make sure you enter a password.');
+                    return;
+                }
+                if (!(window.crypto && crypto.subtle && window.TextEncoder)) {
+                    setError(TECHNICAL_ERROR);
+                    return;
+                }
+                sha256Hex(value).then(function (hash) {
+                    if (hash === PASSWORD_SHA256) unlock();
+                    else setError('Please enter the correct password.');
+                }, function () {
+                    setError(TECHNICAL_ERROR);
+                });
+            });
+
+            input.focus();
+        })();
+    </script>
 
     <!-- Navigation -->
     <nav class="fixed w-full z-[100] top-0 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-slate-200" id="navbar">
@@ -1279,64 +1378,6 @@
                 animate();
             }
         });
-    </script>
-
-    <script>
-        // Guest Area: a cosmetic password screen in front of the page, like the Wix original.
-        // Only a SHA-256 hash of the password is stored here.
-        (function () {
-            var PASSWORD_SHA256 = 'af1cdc90033c6e010a12cff918c1c7a4f41f14a4e73de371c5e5f106456bcbd6';
-            var gate = document.getElementById('gate');
-            if (!gate) return;
-            var form = document.getElementById('gate-form');
-            var input = document.getElementById('gate-input');
-            var field = document.getElementById('gate-field');
-            var error = document.getElementById('gate-error');
-
-            var behindGate = Array.prototype.filter.call(document.body.children, function (el) {
-                return el !== gate && el.tagName !== 'SCRIPT';
-            });
-            behindGate.forEach(function (el) { el.inert = true; });
-
-            function sha256Hex(text) {
-                return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
-                    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
-                        return b.toString(16).padStart(2, '0');
-                    }).join('');
-                });
-            }
-
-            function showError(message) {
-                error.textContent = message;
-                field.classList.add('is-invalid');
-            }
-
-            function unlock() {
-                behindGate.forEach(function (el) { el.inert = false; });
-                gate.remove();
-                document.documentElement.classList.remove('gate-locked');
-                document.title = 'Home | 10X';
-                var target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
-                if (target) target.scrollIntoView();
-            }
-
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
-                var value = input.value;
-                if (!value) {
-                    showError('Make sure you enter a password.');
-                    return;
-                }
-                error.textContent = '';
-                field.classList.remove('is-invalid');
-                sha256Hex(value).then(function (hash) {
-                    if (hash === PASSWORD_SHA256) unlock();
-                    else showError('Please enter the correct password.');
-                });
-            });
-
-            input.focus();
-        })();
     </script>
 </body>
 </html>
