@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>test | 10X</title>
+    <link rel="canonical" href="https://10xvi.github.io/blank/">
+    <meta property="og:title" content="test | 10X">
+    <meta property="og:url" content="https://10xvi.github.io/blank/">
+    <meta property="og:site_name" content="10X">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="test | 10X">
+    <link rel="icon" type="image/svg+xml" href="../assets/logo-mark.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400&family=Wix+Madefor+Text:wght@400&display=swap">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --footer-font-size: clamp(13px, calc(11.58px + 0.2895vw), 15.75px);
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            color: #000;
+        }
+
+        body {
+            font-family: 'Wix Madefor Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        a { color: inherit; text-decoration: none; }
+
+        /* POD.AGI embed, full viewport like the Wix HTML embed */
+        .pod-stage {
+            height: 100vh;
+            width: 100%;
+        }
+        .pod-stage iframe {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+
+        /* Empty band between the embed and the footer */
+        .spacer {
+            height: 39.5vw;
+            background: #fff;
+        }
+
+        /* Footer */
+        .site-footer {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            height: 360px;
+            background: #fff;
+            font-size: var(--footer-font-size);
+        }
+
+        .footer-logo {
+            justify-self: center;
+            display: block;
+            width: min(225px, 15.625vw);
+            height: min(225px, 15.625vw);
+            margin-top: 87px;
+        }
+        .footer-logo img {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .footer-right {
+            position: relative;
+            padding-top: 87px;
+        }
+
+        .footer-links {
+            font-family: 'Space Grotesk', sans-serif;
+            text-transform: uppercase;
+        }
+        .footer-nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 240px;
+            line-height: 1.27;
+        }
+        .footer-legal {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-top: 2px;
+            line-height: 1.6;
+        }
+        .footer-links a:hover { opacity: .7; }
+
+        .footer-contact {
+            position: absolute;
+            top: 90px;
+            left: 52%;
+            font-family: 'Space Grotesk', sans-serif;
+            line-height: 1.6;
+        }
+        .footer-contact p { margin: 0; }
+        .footer-contact .footer-cities {
+            line-height: 1.43;
+        }
+
+        .footer-social {
+            display: flex;
+            gap: 12px;
+            margin: 21px 0 0;
+            padding: 0;
+            list-style: none;
+        }
+        .footer-social a { display: block; width: 20px; height: 20px; }
+        .footer-social img { display: block; width: 20px; height: 20px; }
+
+        .footer-copy {
+            position: absolute;
+            right: 14px;
+            bottom: 14px;
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 749px) {
+            .site-footer {
+                display: block;
+                padding-top: 29px;
+            }
+            .footer-logo { display: none; }
+            .footer-right {
+                display: flex;
+                justify-content: center;
+                gap: 32px;
+                padding: 0 16px;
+            }
+            .footer-nav { width: auto; }
+            .footer-contact {
+                position: static;
+                padding-top: 1px;
+            }
+            .footer-copy {
+                right: auto;
+                left: 10px;
+                bottom: 31px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="pod-stage">
+        <iframe src="pod.html" title="Embedded Content" loading="eager"></iframe>
+    </header>
+
+    <main>
+        <section class="spacer" aria-hidden="true"></section>
+    </main>
+
+    <footer class="site-footer">
+        <a class="footer-logo" href="../" aria-label="Homepage">
+            <img src="../assets/logo-mark.svg" alt="">
+        </a>
+
+        <div class="footer-right">
+            <div class="footer-links">
+                <nav class="footer-nav" aria-label="Site">
+                    <a href="../#problem">The Problem</a>
+                    <a href="../#solution">The Key</a>
+                    <a href="../#paradigm">The Paradigm Shift</a>
+                    <a href="../#vision">The Path</a>
+                    <a href="../#imperative">The Imperative</a>
+                    <a href="../#faq">FAQ</a>
+                </nav>
+                <div class="footer-legal">
+                    <a href="../">Terms &amp; Conditions</a>
+                    <a href="../">Privacy Policy</a>
+                    <a href="../">Accessibility Statement</a>
+                </div>
+            </div>
+
+            <div class="footer-contact">
+                <p>J@1OX.VI</p>
+                <p class="footer-cities">TYO, JP<br>SFO, CA</p>
+                <ul class="footer-social" aria-label="Social Bar">
+                    <li><a href="https://www.linkedin.com/company/wix-com" target="_blank" rel="noopener"><img src="../assets/social/linkedin.png" alt="LinkedIn"></a></li>
+                    <li><a href="https://www.facebook.com/WixStudio" target="_blank" rel="noopener"><img src="../assets/social/facebook.png" alt="Facebook"></a></li>
+                    <li><a href="https://twitter.com/WixStudio" target="_blank" rel="noopener"><img src="../assets/social/x.png" alt="X"></a></li>
+                    <li><a href="https://www.instagram.com/wix/" target="_blank" rel="noopener"><img src="../assets/social/instagram.png" alt="Instagram"></a></li>
+                </ul>
+            </div>
+        </div>
+
+        <p class="footer-copy">© 2025 by 1OX.VI</p>
+    </footer>
+
+</body>
+</html>
