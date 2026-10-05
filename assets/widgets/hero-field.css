@@ -5,10 +5,15 @@ canvas[data-widget="hero-field"] {
   width: 100%;
   height: 100%;
   pointer-events: none;
+  /* the hero settles in behind the headline as the page unlocks */
   transition: opacity 1.8s cubic-bezier(.22, .61, .36, 1);
 }
+/* the closing field: the shared first-view entrance, started by the script on first scroll into view */
+canvas[data-widget="hero-field"][data-mode="calm"] {
+  transition: opacity 600ms var(--ease-in, cubic-bezier(.4, 0, 1, 1));
+}
 @media (prefers-reduced-motion: reduce) {
-  canvas[data-widget="hero-field"] { transition: none; }
+  canvas[data-widget="hero-field"], canvas[data-widget="hero-field"][data-mode="calm"] { transition: none; }
 }
 /* site-wide "Pause animations": the field appears as a still, without the fade */
 html.motion-paused canvas[data-widget="hero-field"] { transition: none; }

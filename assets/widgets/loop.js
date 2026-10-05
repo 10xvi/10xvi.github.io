@@ -6,11 +6,12 @@
   'use strict';
 
   var NAMES = ['Sense', 'Understand', 'Plan', 'Act', 'Verify', 'Learn'];
-  var VARS = ['--red', '--orange', '--amber', '--sky', '--indigo', '--blue'];
-  var FALLBACK = ['#ef4444', '#f97316', '#f59e0b', '#0ea5e9', '#6366f1', '#3b82f6'];
+  // the brand ramp, as in the hero: orange into amber into sky, so the figure stays on the site's palette
+  var VARS = ['--orange', '--orange', '--amber', '--sky', '--sky', '--sky'];
+  var FALLBACK = ['#f97316', '#f97316', '#f59e0b', '#0ea5e9', '#0ea5e9', '#0ea5e9'];
   // text-safe twins of the step hues (shared -ink tokens) for small numbers on white or the tint
-  var INK_VARS = ['--red-ink', '--orange-ink', '--amber-ink', '--sky-ink', '--indigo-ink', '--blue-ink'];
-  var INK_FALLBACK = ['#b91c1c', '#c2410c', '#b45309', '#0369a1', '#4338ca', '#1d4ed8'];
+  var INK_VARS = ['--orange-ink', '--orange-ink', '--amber-ink', '--sky-ink', '--sky-ink', '--sky-ink'];
+  var INK_FALLBACK = ['#c2410c', '#c2410c', '#b45309', '#0369a1', '#0369a1', '#0369a1'];
   // phones and portrait tablets: the ring pins above the list and scrolling drives the active step
   var PIN_MQ = '(max-width: 960px) and (min-height: 600px)';
   var TAU = Math.PI * 2;
@@ -49,6 +50,22 @@
     try { v = getComputedStyle(document.documentElement).getPropertyValue(name); } catch (e) { /* ignore */ }
     return parseColor(v, fb);
   }
+  // a CSS box-shadow list (outer shadows only) as [{x, y, b, sp, c}], e.g. the shared --shadow-plate
+  var PLATE_FB = '0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12)';
+  function cssShadows(name, fb) {
+    var v = '';
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { /* ignore */ }
+    var parts = (v || fb).split(/,(?![^(]*\))/), out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (/inset/i.test(part)) continue;
+      var col = /rgba?\([^)]*\)|#[0-9a-f]{3,8}\b/i.exec(part);
+      var n = part.replace(col ? col[0] : '', ' ').match(/-?\d*\.?\d+/g) || [];
+      if (n.length < 2) continue;
+      out.push({ x: +n[0], y: +n[1], b: +(n[2] || 0), sp: +(n[3] || 0), c: col ? col[0] : 'rgba(15,23,42,.1)' });
+    }
+    return out.length || !v ? out : cssShadows('', fb);
+  }
   function toLin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
   function toSrgb(l) { var v = l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055; return Math.round(clamp(v, 0, 1) * 255); }
   function mixLin(a, b, t) {
@@ -82,7 +99,7 @@
     var fc = !!(fcq && fcq.matches);
 
     /* ---------- palette ---------- */
-    var C = [], INK = [], SLATE, LINE, LINE2, MUTED, HEAD, SKY, SKYD, BG, BGALT;
+    var C = [], INK = [], SLATE, LINE, LINE2, MUTED, HEAD, SKY, SKYD, BG, BGALT, PLATE = [];
     var FG = [0, 0, 0], HL = [0, 0, 0];      // forced colours: CanvasText and Highlight
     var probe = null;
     function sysColor(name, fb) {
@@ -114,6 +131,7 @@
       SKYD = cssVar('--sky-deep', '#0284c7');
       BG = cssVar('--bg', '#ffffff');
       BGALT = cssVar('--bg-alt', '#f8fafc');
+      PLATE = cssShadows('--shadow-plate', PLATE_FB);
       if (fc) {
         // structure in CanvasText (secondary hairlines in GrayText), the signal and the active step in
         // Highlight, fills in Canvas so nothing paints an opaque light disc on a dark theme
@@ -352,6 +370,12 @@
     var feedDelay = 0;
     var modelPulse = 0, ripple = -1, modelMorph = 1, clock = 0;
     var hovering = -1;
+    // first-view entrance: the signal, the lit station and the model ease in over 600ms (ease-in) once the
+    // page has revealed the figure; the dial, beads and labels are already there. None under reduced
+    // motion or the page's pause.
+    var ENT = 0.6, entT = 0, EA = 0;
+    function revealed() { return !mount.classList.contains('reveal') || mount.classList.contains('in'); }
+    function endEntrance() { entT = ENT; EA = 1; }
 
     function nearest() { return mod(Math.round(p), 6); }
 
@@ -479,20 +503,25 @@
       c.lineJoin = 'round';
       var i, a, pt, pt2;
 
-      // dial plate: white, soft layered shadow, slate hairline (forced colours: the outline alone)
+      // dial plate: white, the shared plate depth (--shadow-plate), slate hairline (forced colours: the
+      // outline alone). Canvas shadows have no spread, so each layer is cast by a disc grown or shrunk by
+      // the spread and drawn off the canvas, with only its shadow offset back under the plate.
       if (!fc) {
         c.save();
-        c.beginPath(); c.arc(cx, cy, Rf, 0, TAU);
-        c.fillStyle = rgbStr(BG);
-        c.shadowColor = 'rgba(15,23,42,0.10)';
-        c.shadowBlur = 30 * sc * dpr;
-        c.shadowOffsetY = 12 * sc * dpr;
-        c.fill();
-        c.shadowColor = 'rgba(15,23,42,0.06)';
-        c.shadowBlur = 3 * dpr;
-        c.shadowOffsetY = 1 * dpr;
-        c.fill();
+        var away = W + Rf * 4 + 100;
+        for (var q = 0; q < PLATE.length; q++) {
+          var sh = PLATE[q];
+          c.beginPath(); c.arc(cx - away, cy, Math.max(1, Rf + sh.sp), 0, TAU);
+          c.fillStyle = '#000';
+          c.shadowColor = sh.c;
+          c.shadowBlur = sh.b * dpr;
+          c.shadowOffsetX = (sh.x + away) * dpr;
+          c.shadowOffsetY = sh.y * dpr;
+          c.fill();
+        }
         c.restore();
+        c.beginPath(); c.arc(cx, cy, Rf, 0, TAU);
+        c.fillStyle = rgbStr(BG); c.fill();
         // faint warm-to-sky wash so the plate is not flat white
         var wash = c.createLinearGradient(cx - Rf, cy - Rf, cx + Rf, cy + Rf);
         wash.addColorStop(0, rgba(C[1], 0.035));
@@ -655,6 +684,7 @@
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       var i, a, pt, pt2;
+      ctx.globalAlpha = EA;                 // entrance (1 once it has played)
 
       /* lit scale ticks */
       ctx.lineCap = 'butt';
@@ -718,8 +748,8 @@
           grad.addColorStop(Math.min(1, frac + 0.0005), rgba(BG, 0));
           ctx.beginPath(); ctx.arc(cx, cy, R, start, end);
           ctx.strokeStyle = grad;
-          ctx.globalAlpha = 0.18; ctx.lineWidth = 7 * sc; ctx.stroke();
-          ctx.globalAlpha = 1; ctx.lineWidth = 2.25; ctx.stroke();
+          ctx.globalAlpha = 0.18 * EA; ctx.lineWidth = 7 * sc; ctx.stroke();
+          ctx.globalAlpha = EA; ctx.lineWidth = 2.25; ctx.stroke();
         } else {
           ctx.beginPath(); ctx.arc(cx, cy, R, start, end);
           ctx.strokeStyle = rgba(colorAt(p), 0.8); ctx.lineWidth = 2.25; ctx.stroke();
@@ -732,6 +762,7 @@
       for (i = 0; i < 6; i++) {
         var gv = stGlow[i];
         var x = sx[i], y = sy[i], col = C[i];
+        ctx.globalAlpha = EA;
         if (arrive[i] > 0) {
           var ar = easeOut(arrive[i]);
           ctx.beginPath(); ctx.arc(x, y, sr + 3 + ar * 18 * sc, 0, TAU);
@@ -743,13 +774,17 @@
           ctx.beginPath(); ctx.arc(x, y, sr + 5.5 * sc, 0, TAU);
           ctx.strokeStyle = rgba(col, 0.38 * gv); ctx.lineWidth = 1; ctx.stroke();
         }
-        // white bead (its drop shadow lives in the static layer)
+        // white bead (its drop shadow lives in the static layer); the bead, its ring and its dot are
+        // structure, so they never take the entrance fade
+        ctx.globalAlpha = 1;
         ctx.beginPath(); ctx.arc(x, y, sr, 0, TAU);
         ctx.fillStyle = rgbStr(BG); ctx.fill();
         // fill rises with activity
         if (gv > 0.01) {
+          ctx.globalAlpha = EA;
           ctx.beginPath(); ctx.arc(x, y, sr, 0, TAU);
           ctx.fillStyle = rgba(col, gv); ctx.fill();
+          ctx.globalAlpha = 1;
         }
         // forced colours: resting stations in CanvasText, the lit one in Highlight
         var ring = fc && gv <= 0.5 ? FG : col;
@@ -759,6 +794,7 @@
         ctx.fillStyle = gv > 0.5 ? rgba(BG, gv) : rgba(ring, 1 - gv * 2);
         ctx.fill();
       }
+      ctx.globalAlpha = EA;
       /* dwell sweep around the resting station */
       if (mode === 'dwell' && !reduced) {
         var dp = clamp(tMode / DWELL, 0, 1);
@@ -782,6 +818,7 @@
       }
 
       drawModel();
+      ctx.globalAlpha = 1;
     }
 
     function drawModel() {
@@ -847,6 +884,11 @@
       var dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
       last = now;
       step(dt);
+      if (entT < ENT && revealed()) {
+        entT = Math.min(ENT, entT + dt);
+        var et = entT / ENT;
+        EA = 1 - Math.cos(et * Math.PI / 2);    // sine ease-in
+      }
       draw();
       raf = requestAnimationFrame(frame);
     }
@@ -977,7 +1019,8 @@
     stGlow = [1, 0, 0, 0, 0, 0];
     layout();
     // reduced motion, or paused before anything has moved: the still where Learn has just closed the loop
-    if (reduced || paused()) staticFrame(0); else draw();
+    // (complete, with no entrance)
+    if (reduced || paused()) { endEntrance(); staticFrame(0); } else draw();
 
     function relayout() {
       readPalette();
@@ -1006,6 +1049,7 @@
       var onReduced = function () {
         reduced = rmq.matches;
         if (reduced) {
+          endEntrance();
           staticFrame(hovering >= 0 ? hovering : scrollK >= 0 ? scrollK : active);
         } else {
           mode = hovering >= 0 ? 'hold' : 'dwell'; tMode = 0; last = 0;
@@ -1021,12 +1065,22 @@
       if (fcq.addEventListener) fcq.addEventListener('change', onForced);
       else if (fcq.addListener) fcq.addListener(onForced);
     }
+    // more contrast: site.css swaps --line, --line-2, --muted and --text, so the hairlines, ticks and the
+    // model's resting mesh are re-read and redrawn with the stronger values
+    var hcq = window.matchMedia ? window.matchMedia('(prefers-contrast: more)') : null;
+    if (hcq) {
+      var onContrast = function () { relayout(); if (!raf && !reduced) draw(); };
+      if (hcq.addEventListener) hcq.addEventListener('change', onContrast);
+      else if (hcq.addListener) hcq.addListener(onContrast);
+    }
     // pausing keeps the frame on screen as it is; resuming carries on from that same state
     var wasPaused = paused();
     function syncPause() {
       var pz = paused();
       if (pz !== wasPaused) {
         wasPaused = pz;
+        // paused part-way through (or before) the entrance: show the finished figure at once
+        if (pz && EA < 1) { endEntrance(); draw(); }
         if (!pz && !reduced && mode === 'hold' && hovering < 0) { mode = 'dwell'; tMode = 0; }
       }
       update();

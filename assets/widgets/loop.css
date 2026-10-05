@@ -34,7 +34,7 @@
 
 [data-widget="loop"] .lp-num {
   font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
-  font-size: 11px;
+  font-size: 0.6875rem;               /* 11px at the default text size; follows the reader's setting */
   font-weight: 500;
   letter-spacing: .14em;
   margin-right: -.14em;               /* trailing tracking out of the box, so the number centres optically */
@@ -43,7 +43,7 @@
 }
 [data-widget="loop"] .lp-name {
   font-family: var(--display, "Space Grotesk", system-ui, sans-serif);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 500;
   letter-spacing: -.01em;
   line-height: 1.15;
@@ -56,9 +56,9 @@
 /* phones: numbers only, the list beside carries the names */
 [data-widget="loop"].lp-compact .lp-name,
 [data-widget="loop"].lp-inner .lp-name { display: none; }
-[data-widget="loop"].lp-compact .lp-num { font-size: 12px; }
+[data-widget="loop"].lp-compact .lp-num { font-size: 0.75rem; }
 /* numbers inside the track (the short pinned ring): a touch smaller so they sit clear of the model well */
-[data-widget="loop"].lp-inner .lp-num { font-size: 11px; }
+[data-widget="loop"].lp-inner .lp-num { font-size: 0.6875rem; }
 
 [data-widget="loop"] .lp-core {
   position: absolute;
@@ -66,7 +66,7 @@
   text-align: center;
   pointer-events: none;
   font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: .14em;
@@ -77,14 +77,14 @@
 [data-widget="loop"].lp-bare .lp-core { display: none; }
 [data-widget="loop"].lp-pointing { cursor: default; }
 
-/* the step list, kept in sync with the ring; each step keeps its own colour (set by the script as --lp-c,
-   with a text-safe twin --lp-ink for the small step numbers) */
-#loop-steps li[data-step="1"] .num { color: var(--lp-ink, var(--red-ink, #b91c1c)); }
+/* the step list, kept in sync with the ring; each step takes its place on the brand ramp, orange to amber
+   to sky (set by the script as --lp-c, with a text-safe twin --lp-ink for the small step numbers) */
+#loop-steps li[data-step="1"] .num { color: var(--lp-ink, var(--orange-ink, #c2410c)); }
 #loop-steps li[data-step="2"] .num { color: var(--lp-ink, var(--orange-ink, #c2410c)); }
 #loop-steps li[data-step="3"] .num { color: var(--lp-ink, var(--amber-ink, #b45309)); }
 #loop-steps li[data-step="4"] .num { color: var(--lp-ink, var(--sky-ink, #0369a1)); }
-#loop-steps li[data-step="5"] .num { color: var(--lp-ink, var(--indigo-ink, #4338ca)); }
-#loop-steps li[data-step="6"] .num { color: var(--lp-ink, var(--blue-ink, #1d4ed8)); }
+#loop-steps li[data-step="5"] .num { color: var(--lp-ink, var(--sky-ink, #0369a1)); }
+#loop-steps li[data-step="6"] .num { color: var(--lp-ink, var(--sky-ink, #0369a1)); }
 /* one state timing for the whole step change (number, title, card, bar), in step with the ring's labels;
    the background sweep is the one longer gesture */
 #loop-steps li .num,
@@ -94,7 +94,7 @@
   background-image: linear-gradient(90deg, var(--lp-soft, rgba(249, 115, 22, .07)), var(--lp-soft-0, rgba(249, 115, 22, 0)) 75%);
   background-repeat: no-repeat;
   background-size: 0% 100%;
-  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0), 0 8px 24px -14px rgba(15, 23, 42, 0);
+  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0), 0 1px 2px rgba(15, 23, 42, 0), 0 8px 24px -12px rgba(15, 23, 42, 0);
   transition: background-size .6s var(--ease-out, cubic-bezier(.2, .7, .2, 1)),
     background-color var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)),
     box-shadow var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
@@ -116,7 +116,8 @@
 #loop-steps li.is-active {
   background-color: var(--bg, #fff);
   background-size: 100% 100%;
-  box-shadow: 0 0 0 1px var(--line, #e2e8f0), 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .14);
+  /* the shared plate depth, with the hairline as a ring */
+  box-shadow: 0 0 0 1px var(--line, #e2e8f0), var(--shadow-plate, 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12));
 }
 #loop-steps li.is-active::before { transform: scaleY(1); }
 #loop-steps li.is-active h3 { color: var(--head, #0f172a); }

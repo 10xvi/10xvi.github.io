@@ -127,6 +127,13 @@
   function styleOf(key) {
     return STR[key] || (STR[key] = 'rgba(' + COL[(key / AQ1) | 0] + ',' + ((key % AQ1) / AQ) + ')');
   }
+  /* "More contrast" swaps --line, --line-2, --muted and --text: drop every cached colour and
+     re-read the tokens. Colour ids keep their positions, so a field's CID indices stay valid. */
+  function refreshPalette() {
+    PAL = null; COL = null; STR = [];
+    colours();
+    if (SPR) { SPR = null; sprites(); }
+  }
   /* geometry grouped by style: one path and one fill or stroke per group */
   function Batch(n) { this.n = n; this.m = {}; this.keys = []; }
   Batch.prototype.reset = function () {
@@ -299,15 +306,23 @@
         best.slice(0, 2).forEach(function (bq) { backPath.moveTo(p.x, p.y); backPath.lineTo(back[bq[1]].x, back[bq[1]].y); });
       });
 
-      /* front layer: a few large out-of-focus cells drifting close to the lens */
+      /* front layer: a few large out-of-focus cells drifting close to the lens.
+         Each rests on a loose anchor inside the canvas, inset by its radius plus its drift
+         (s * .5 across, s * .4 down) and the front parallax (camera times 1.9, at most 29 x 19 px),
+         so no disc is ever cut into a half-moon at an edge. Warm discs sit high on the page's warm
+         wash, sky discs low on its sky wash, so no disc greys out over the opposite hue. */
       bokeh = [];
       var nb = calm ? 0 : mobile ? 2 : 5;
+      var bAnc = mobile ? [[.86, .14], [.12, .8]] : [[.7, .42], [.62, .98], [.93, .05], [.16, 1], [1, .8]];
+      var bmx = s * .5 + 30, bmy = s * .4 + 20, bx0 = mobile ? 0 : W * .5, by1 = mobile ? H * .42 : H;
       for (i = 0; i < nb; i++) {
         var k1 = hash(i + 41, 5), k2 = hash(i + 17, 23), k3 = hash(i + 3, 61);
+        var br = Math.max(8, Math.min((.035 + .045 * k3) * Math.max(W, H), (W - bx0) / 2 - bmx, by1 / 2 - bmy));
+        var xl = bx0 + br + bmx, xh = Math.max(xl, W - br - bmx), yl = br + bmy, yh = Math.max(yl, by1 - br - bmy);
         bokeh.push({
-          x: mobile ? (.1 + .9 * k1) * W : (.5 + .55 * k1) * W,
-          y: mobile ? (-.05 + .4 * k2) * H : (-.05 + 1.1 * k2) * H,
-          r: (.035 + .045 * k3) * Math.max(W, H), p: k3 * TAU
+          x: xl + (xh - xl) * clamp(bAnc[i][0] + (k1 - .5) * .1, 0, 1),
+          y: yl + (yh - yl) * clamp(bAnc[i][1] + (k2 - .5) * .1, 0, 1),
+          r: br, p: k3 * TAU
         });
       }
       Tk = srcPos.map(function (p) { return bokeh.map(function (b) { return Math.hypot(b.x - p[0], b.y - p[1]) * 1.15 / speed; }); });
@@ -357,6 +372,18 @@
       if (calm || W < 2 || !cells.length) return;
       clearHeadline();
       if (shown && !running) { if (isReduced()) renderStatic(); else { update(0); render(); } }
+    };
+    /* after refreshPalette(): pick up the new tokens and redraw a held frame (a running field
+       repaints on its next frame anyway) */
+    this.recolour = function () {
+      PLc = palette(); CI = colours();
+      for (var j = 0; j < cells.length; j++) {
+        var c = cells[j];
+        c.col = lerp3(PLc.orange, PLc.amber, .15 + .85 * c.hu);
+        c.nuc = lerp3(PLc.deep, PLc.orange, c.hu * .6);
+      }
+      if (W < 2 || !cells.length || !shown || running) return;
+      if (isReduced()) renderStatic(); else { update(0); render(); }
     };
 
     function dijkstra(src) {
@@ -779,12 +806,22 @@
         shown = true;
         if (!calm) clearHeadline();
         if (reduce) renderStatic(); else { update(1 / 60); render(); }
-        /* the closing field is built on approach, long after the page revealed: show it as it is, no late fade */
-        if (calm) { cv.style.transition = 'none'; cv.style.opacity = '1'; }
-        else requestAnimationFrame(function () { cv.style.opacity = '1'; });
+        /* the closing field is drawn on approach and fades in on first scroll into view (enter());
+           the hero fades in behind the headline as the page unlocks */
+        if (!calm) requestAnimationFrame(function () { cv.style.opacity = '1'; });
       }
+      if (calm && shown && !entered && (inView || reduce || paused)) enter(reduce || paused);
     }
     this.evaluate = evaluate;
+
+    /* the shared first-view entrance (closing field only): about 600 ms ease-in, once.
+       Under reduced motion or the pause it is simply there, with no transition. */
+    var entered = false, inView = false;
+    function enter(still) {
+      entered = true;
+      if (still) cv.style.transition = 'none';
+      cv.style.opacity = '1';
+    }
 
     var rt = 0, lastW = 0, lastH = 0, near = !calm;
     function relayout() {
@@ -826,8 +863,16 @@
           near = es[es.length - 1].isIntersecting;
           if (near) relayout(); else release();
         }, { rootMargin: '100% 0px' }).observe(cv);
+        /* first real scroll into view (a sixth of the section showing) starts the entrance */
+        var seenIO = new IntersectionObserver(function (es) {
+          if (!es[es.length - 1].isIntersecting) return;
+          inView = true;
+          seenIO.disconnect();
+          evaluate();
+        }, { threshold: .16 });
+        seenIO.observe(cv);
       }
-    } else { near = true; relayout(); }
+    } else { near = true; inView = true; relayout(); }
     if (mqReduce) {
       var onMQ = function () { if (isReduced()) { evaluate(); if (W && shown) renderStatic(); } else evaluate(); };
       if (mqReduce.addEventListener) mqReduce.addEventListener('change', onMQ);
@@ -871,6 +916,16 @@
   document.addEventListener('site:unlocked', function () { setTimeout(create, 0); });
   document.addEventListener('visibilitychange', evalAll);
   document.addEventListener('site:motion', evalAll);
+  var mqContrast = window.matchMedia ? window.matchMedia('(prefers-contrast: more)') : null;
+  if (mqContrast) {
+    var onContrast = function () {
+      if (!PAL) return; /* nothing read yet: the first read gets the current values */
+      refreshPalette();
+      for (var i = 0; i < fields.length; i++) fields[i].recolour();
+    };
+    if (mqContrast.addEventListener) mqContrast.addEventListener('change', onContrast);
+    else if (mqContrast.addListener) mqContrast.addListener(onContrast);
+  }
   if ('MutationObserver' in window) {
     new MutationObserver(evalAll).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
   }

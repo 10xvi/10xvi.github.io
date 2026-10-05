@@ -8,7 +8,6 @@
     var nav = document.getElementById('nav');
     var menuBtn = document.getElementById('menu-btn');
     var menu = document.getElementById('mobile-menu');
-    var menuLinks = menu.querySelectorAll('a');
     var where = document.getElementById('where');
     var motionBtns = document.querySelectorAll('[data-motion-toggle]');
     var reduceMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -106,10 +105,12 @@
             setMenu(false, { refocus: true });
             return;
         }
-        // Keep Tab inside the open menu: button, then the links, then back to the button.
+        // Keep Tab inside the open menu: button, then the links (and the pause row), then back to the button.
         if (e.key === 'Tab') {
-            var first = menuLinks[0];
-            var last = menuLinks[menuLinks.length - 1];
+            // The menu's own pause row shows on phones only, so the last stop depends on the width.
+            var items = Array.prototype.filter.call(menu.querySelectorAll('a, button'), function (el) { return el.getClientRects().length > 0; });
+            var first = items[0];
+            var last = items[items.length - 1];
             if (!e.shiftKey && document.activeElement === last) {
                 e.preventDefault();
                 menuBtn.focus();

@@ -38,8 +38,13 @@
   function seg(t, a, b) { return clamp((t - a) / (b - a), 0, 1); }
   function f(n) { return Math.round(n * 100) / 100; }
   function px(n) { return Math.round(n) + 0.5; } // crisp 1px hairline
-  // JetBrains Mono advance is 0.6em; labels use .14em tracking at 11px.
-  function textW(s) { return s.length * (11 * 0.6 + 11 * 0.14) - 11 * 0.14; }
+  // JetBrains Mono advance is 0.6em; labels use .14em tracking at 0.6875rem
+  // (11px at the default 16px root, larger when the reader raises the text size).
+  function lblPx() {
+    var r = parseFloat(window.getComputedStyle(root).fontSize);
+    return 0.6875 * (r > 0 ? r : 16);
+  }
+  function textW(s) { var p = lblPx(); return s.length * (p * 0.6 + p * 0.14) - p * 0.14; }
   function locked() { return root.classList.contains('gate-locked'); }
   // site-wide "Pause animations" control (layout): html.motion-paused + document 'site:motion'
   function paused() { return root.classList.contains('motion-paused'); }

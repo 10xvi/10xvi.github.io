@@ -13,6 +13,8 @@
   /* the site-wide "Pause animations" control (html.motion-paused + the site:motion event) */
   function paused() { return root.classList.contains('motion-paused'); }
   var fcq = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+  /* more contrast: site.css swaps --line, --line-2, --muted and --text, so the palette is read again */
+  var pcq = window.matchMedia ? window.matchMedia('(prefers-contrast: more)') : null;
   var FC = false; // forced colours: labels and essential strokes in system colours, no fills, glows or shadows
 
   /* ---------- helpers ---------- */
@@ -180,6 +182,7 @@
   function Host(mount, impl) {
     this.mount = mount; this.impl = impl; this.st = {};
     this.w = 0; this.h = 0; this.dpr = 1; this.visible = false; this.leftAt = 0;
+    this.ent = 0; // first-view entrance, 0 to 1 over ENT_DUR of running time (played once)
     this.pool = {}; this.used = {}; this.allocs = 0; this.bakes = 0; this.dirty = true; this.baked = false;
     var stage = doc.createElement('div'); stage.className = 'cpw-stage';
     var cv = doc.createElement('canvas'); cv.className = 'cpw-canvas'; cv.setAttribute('aria-hidden', 'true');
@@ -225,11 +228,26 @@
       if (locked() || !this.visible) return; // baked on first view, never under the gate
       this.bake();
     }
+    // a figure first drawn still (reduced motion or the site pause) has no entrance
+    if (this.ent < 1 && (reduced() || paused())) this.ent = 1;
     var ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
     this.impl.draw(this, ctx);
   };
+
+  /* the shared first-view entrance: the figure's outer structure eases in over about 600ms */
+  var ENT_DUR = 0.6;
+  function entK(h) { return h.ent >= 1 ? 1 : 0.35 + 0.65 * easeOut(h.ent); }
+  /* it starts with the block's own reveal (site.js adds .in), so the two play together; a block that was
+     jumped over (.skip-reveal) is simply there */
+  function entReady(h) {
+    var r = h.revealEl;
+    if (r === undefined) r = h.revealEl = (h.mount.closest && h.mount.closest('.reveal')) || null;
+    if (!r) return true;
+    if (r.classList.contains('skip-reveal')) { h.ent = 1; return false; }
+    return r.classList.contains('in');
+  }
 
   var raf = 0, last = 0;
   function wantRun() {
@@ -243,7 +261,10 @@
     var dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
     for (var i = 0; i < widgets.length; i++) {
       var h = widgets[i];
-      if (h.visible && h.w) { h.impl.update(h, dt); h.render(); }
+      if (h.visible && h.w) {
+        if (h.ent < 1 && h.baked && entReady(h)) h.ent = Math.min(1, h.ent + dt / ENT_DUR);
+        h.impl.update(h, dt); h.render();
+      }
     }
     raf = requestAnimationFrame(tick);
   }
@@ -268,6 +289,7 @@
   /* =====================================================================
      A. CONVERSATION: Body (orange, organic) <-> Intelligence (sky, geometric)
      ===================================================================== */
+  var FIELD_MID = [226, 232, 240];
   var SIGNALS = ['Light', 'Sound', 'Temperature', 'Breath', 'Currents'];
   var SIG_AMP = [5, 8.5, 9, 8.5, 6];
   function sigWave(k, x, ph) {
@@ -386,11 +408,12 @@
     bake: function (h) {
       var st = h.st, A = st.A, B = st.B, R = st.R, sky = COL.sky, orange = COL.orange, amber = COL.amber, i, k, ctx;
       var l0 = st.lanes[0], l1 = st.lanes[1];
-      // field, at the strongest attunement; drawn with a lower alpha per frame
+      // field, at the strongest attunement; drawn with a lower alpha per frame. Its pale middle is a fixed
+      // tone, not --line: a ground wash should not turn grey when more contrast strengthens the hairlines
       var F = makeLayer(h, 'F'); ctx = F.ctx;
       var fieldA = 0.085, fe = st.mode === 'h' ? 0.07 : 0.1;
       var g = ctx.createLinearGradient(A.x, A.y, B.x, B.y);
-      g.addColorStop(0, rgba(amber, 0)); g.addColorStop(fe, rgba(amber, 0)); g.addColorStop(fe + 0.14, rgba(amber, fieldA)); g.addColorStop(0.5, rgba(COL.line, 0.3));
+      g.addColorStop(0, rgba(amber, 0)); g.addColorStop(fe, rgba(amber, 0)); g.addColorStop(fe + 0.14, rgba(amber, fieldA)); g.addColorStop(0.5, rgba(FIELD_MID, 0.3));
       g.addColorStop(0.86 - fe, rgba(sky, fieldA)); g.addColorStop(1 - fe, rgba(sky, 0)); g.addColorStop(1, rgba(sky, 0));
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.moveTo(l0.X[0], l0.Y[0]);
@@ -499,14 +522,16 @@
       var intelBreath = Math.sin(beat);
 
       // soft field between the lanes (baked at full strength, faded in as the two attune)
-      blitLayer(h, ctx, st.fieldLayer, (0.045 + 0.04 * att) / 0.085);
+      // first view: the lanes ease in between the two poles
+      var ek = entK(h);
+      blitLayer(h, ctx, st.fieldLayer, (0.045 + 0.04 * att) / 0.085 * ek);
       // lane tracks and arrowheads (baked), then the slow carrier dots
-      blitLayer(h, ctx, st.trackLayer);
+      blitLayer(h, ctx, st.trackLayer, ek);
       var i;
       for (var k = 0; k < 2; k++) {
         var ln = st.lanes[k], col = k === 0 ? sky : orange;
         var gap = 16, off = (t * 16) % gap;
-        ctx.fillStyle = rgba(col, 0.75);
+        ctx.fillStyle = rgba(col, 0.75 * ek);
         ctx.beginPath();
         for (var s = off; s < ln.len - 18; s += gap) {
           var e = smooth(0, 40, s) * smooth(ln.len - 18, ln.len - 50, s);
@@ -1025,6 +1050,9 @@
       var em = st.em;
       // forced colours: the held-back groups stay clearly drawn (the stage list carries the emphasis too)
       if (FC) em = em.map(function (e) { return 0.6 + 0.4 * e; });
+      // first view: the home is there at once, the rooms and the wider settings ease in around it
+      var ek = entK(h);
+      if (ek < 1) em = [em[0], em[1] * ek, em[2] * ek];
       var tc = st.stillFront ? 2.15 : st.t - Math.floor(st.t / PERIOD) * PERIOD;
       var rho = this.front(st, tc);
 
@@ -1233,11 +1261,17 @@
     // nothing changed at unlock: draw (baking what is in view, once) and start
     doc.addEventListener('site:unlocked', function () { widgets.forEach(function (h) { h.render(); }); kick(); });
     // the site-wide pause: the loop stops on the frame it was showing and resumes from it (kick resets the clock)
-    doc.addEventListener('site:motion', function () { kick(); });
-    if (fcq) {
-      var onFc = function () { readColors(); widgets.forEach(function (h) { h.relayout(); }); flush(); };
-      if (fcq.addEventListener) fcq.addEventListener('change', onFc); else if (fcq.addListener) fcq.addListener(onFc);
-    }
+    // a pause during the entrance completes it, so the held frame is the whole figure
+    doc.addEventListener('site:motion', function () {
+      if (paused()) widgets.forEach(function (h) { if (h.ent < 1 && h.baked) { h.ent = 1; h.render(); } });
+      kick();
+    });
+    // forced colours or more contrast: read the palette again and re-bake (hairlines and labels follow)
+    var onPalette = function () { readColors(); widgets.forEach(function (h) { h.relayout(); }); flush(); };
+    [fcq, pcq].forEach(function (q) {
+      if (!q) return;
+      if (q.addEventListener) q.addEventListener('change', onPalette); else if (q.addListener) q.addListener(onPalette);
+    });
     if ('MutationObserver' in window) {
       new MutationObserver(function () { if (!locked()) { kick(); } }).observe(root, { attributes: true, attributeFilter: ['class'] });
     }

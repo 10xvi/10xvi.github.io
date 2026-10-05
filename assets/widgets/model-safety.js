@@ -6,6 +6,8 @@
   var root = document.documentElement;
   var reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   var forcedMQ = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+  /* site.css swaps --line, --line-2, --muted and --text for stronger values in this mode */
+  var contrastMQ = window.matchMedia ? window.matchMedia('(prefers-contrast: more)') : null;
   var FC = false; /* forced colors: the canvas draws in system colours only, no glows or tints */
   var TAU = Math.PI * 2;
   var widgets = [];
@@ -20,6 +22,33 @@
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
   function rand(a, b) { return a + Math.random() * (b - a); }
   function smooth01(t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
+
+  /* ---------- first-view entrance (the shared one): the figure eases in over about 600 ms, once,
+     when it first scrolls into view. Nothing under reduced motion or pause; pausing or switching to
+     reduced motion part-way completes it at once, and it never replays. ---------- */
+  var ENT_MS = 600; /* wall-clock time, so slow frames do not stretch it */
+  function armIntro(w, node) {
+    w.intro = -1; /* -1: armed, waiting to come into view; then the start time */
+    w.introNode = reduced() || paused() ? null : node;
+    if (w.introNode) w.introNode.style.opacity = '0';
+  }
+  function endIntro(w) {
+    if (!w.introNode) return;
+    w.introNode.style.opacity = '';
+    w.introNode = null;
+  }
+  function stepIntro(w, now) {
+    if (!w.introNode) return;
+    if (w.intro < 0) {
+      /* the IntersectionObserver wakes the loop 80px early; the entrance waits for the real view */
+      var r = w.mount.getBoundingClientRect(), vh = window.innerHeight || root.clientHeight;
+      if (r.top > vh - Math.min(96, r.height * 0.25) || r.bottom < 64) return;
+      w.intro = now;
+    }
+    var k = (now - w.intro) / ENT_MS;
+    if (k >= 1) endIntro(w);
+    else w.introNode.style.opacity = smooth01(k).toFixed(3);
+  }
 
   /* ---------- palette, read from the page's CSS variables ---------- */
   function hexRgb(str, fb) {
@@ -168,6 +197,7 @@
     this.ctx = canvas.getContext('2d');
     this.lblShared = lblShared;
     this.lblYours = lblYours;
+    armIntro(this, stage); /* the drawing and its labels; the card frame and legend arrive with the section */
     this.w = 0; this.h = 0;
     this.time = 0;
     this.learn = 0.3;    /* how much the shared model has learned: drives its glow */
@@ -401,7 +431,11 @@
     /* a complete, calm frame: signals mid-flight, a learned update on its way back out */
     this.inb = []; this.outb = []; this.ring = -1;
     var N = this.nodes.length, i;
-    for (i = 0; i < N; i++) { this.nodes[i].land = 1; this.nodes[i].f = 0; }
+    for (i = 0; i < N; i++) {
+      this.nodes[i].land = 1; this.nodes[i].f = 0;
+      /* the still frame is the same every time it is redrawn (resize, scroll in/out, font load) */
+      if (full) { this.nodes[i].kind = (i * 3 + 1) % 4; this.nodes[i].run = 1 + (i % 3); }
+    }
     for (i = 0; i < N; i++) {
       /* inbound traces sit on the outer half of each channel, clear of the returning comets */
       var p = full ? 0.1 + 0.3 * ((i * 0.37) % 1) : ((i * 0.37) % 1) * 0.75 + 0.12;
@@ -730,6 +764,7 @@
     mount.appendChild(plot);
     this.plot = plot;
     this.svg = svg;
+    armIntro(this, plot);
     this.time = 0;
     this.c = certaintyAt(0); /* the first frame is the loop's own first frame: no jump when play starts */
     this.w = 0; this.h = 0;
@@ -754,11 +789,10 @@
     var yLim = Math.round(yT + (yB - yT) * 0.16) + 0.5;
     var M = 0.74;
     var px0 = x0 + (small ? 15 : 20), px1 = x1 - (small ? 6 : 8);
-    var mx = x0 + (small ? 7 : 8); /* the size meter, just inside the y-axis */
     var self = this;
     this.X = function (c) { return px0 + c * (px1 - px0); };
     this.Y = function (v) { return yB - v * M * (yB - yLim); };
-    this.g = { x0: x0, x1: x1, yB: yB, yT: yT, yLim: yLim, mx: mx };
+    this.g = { x0: x0, x1: x1, yB: yB, yT: yT, yLim: yLim };
     var id = this.id, i, d = '', area = '';
     for (i = 0; i <= 120; i++) {
       var c = i / 120, x = this.X(c), y = this.Y(sizeOf(c));
@@ -798,20 +832,17 @@
       '<path d="M' + (x0 - 3.5) + ' ' + (yT - 5.5) + 'L' + x0 + ' ' + (yT - 10) + 'L' + (x0 + 3.5) + ' ' + (yT - 5.5) + '"/>' +
       '<path d="M' + (x1 - 4.5) + ' ' + (yB - 3.5) + 'L' + x1 + ' ' + yB + 'L' + (x1 - 4.5) + ' ' + (yB + 3.5) + '"/>' +
       '</g>';
-    /* fixed limit */
-    /* (the dashes start just after the meter's red cap, so the cap reads on its own) */
-    s += '<line class="ms-sf-limit" x1="' + (mx + 6) + '" x2="' + x1 + '" y1="' + yLim + '" y2="' + yLim + '"/>';
-    /* the size meter: a fine track from the baseline up to the limit, capped by a red tick on the limit line */
-    s += '<line class="ms-sf-track" x1="' + mx + '" x2="' + mx + '" y1="' + yB + '" y2="' + yLim + '"/>';
-    s += '<line class="ms-sf-limit-cap" x1="' + (mx - 2) + '" x2="' + (mx + 2) + '" y1="' + yLim + '" y2="' + yLim + '"/>';
+    /* fixed limit: a short red tick across the y-axis, then the dashes (a small gap keeps the tick on its own) */
+    s += '<line class="ms-sf-limit" x1="' + (x0 + 7) + '" x2="' + x1 + '" y1="' + yLim + '" y2="' + yLim + '"/>';
+    s += '<line class="ms-sf-limit-cap" x1="' + (x0 - 2.5) + '" x2="' + (x0 + 2.5) + '" y1="' + yLim + '" y2="' + yLim + '"/>';
     /* curve */
     s += '<path class="ms-sf-curve" d="' + d + '" stroke="url(#' + id + 'c)"/>';
     /* moving marker */
     s += '<g class="ms-sf-mark">' +
       '<line class="ms-sf-drop" data-r="drop"/>' +
       '<line class="ms-sf-across" data-r="across"/>' +
-      '<path class="ms-sf-bar" data-r="bar"/>' +
-      '<circle class="ms-sf-tick" data-r="tick" r="2.5"/>' +
+      '<circle class="ms-sf-tick" data-r="tick" r="3"/>' +
+      '<circle class="ms-sf-tick" data-r="ytick" r="3"/>' +
       '<circle class="ms-sf-halo" data-r="halo" fill="url(#' + id + 'g)"/>' +
       '<circle class="ms-sf-halo-ring" data-r="ring"/>' +
       '<circle class="ms-sf-dot" data-r="dot" r="3.5"/>' +
@@ -850,13 +881,14 @@
     var X = x.toFixed(2), Y = y.toFixed(2);
     r.drop.setAttribute('x1', X); r.drop.setAttribute('x2', X);
     r.drop.setAttribute('y1', (y + 5).toFixed(2)); r.drop.setAttribute('y2', g.yB);
-    r.across.setAttribute('x1', g.mx + 5); r.across.setAttribute('x2', (x - 5).toFixed(2));
+    r.across.setAttribute('x1', g.x0 + 5); r.across.setAttribute('x2', (x - 5).toFixed(2));
     r.across.setAttribute('y1', Y); r.across.setAttribute('y2', Y);
-    /* the meter fill: a 4px rounded bar from the baseline up to the current size (caps inside the span) */
-    var bh = Math.max(0, g.yB - y), b0 = g.yB - 2, b1 = Math.min(b0, y + 2);
-    r.bar.setAttribute('d', 'M' + g.mx + ' ' + b0.toFixed(2) + 'V' + b1.toFixed(2));
-    r.bar.style.opacity = bh < 4 ? (bh / 4).toFixed(2) : '';
+    /* one 6px sky dot on each axis: certainty under the point, size of action where the guide meets the y-axis
+       (the y dot fades out over its last 6px so it never sits as a blob in the corner) */
+    var bh = Math.max(0, g.yB - y);
     r.tick.setAttribute('cx', X); r.tick.setAttribute('cy', g.yB);
+    r.ytick.setAttribute('cx', g.x0); r.ytick.setAttribute('cy', Y);
+    r.ytick.style.opacity = bh < 6 ? (bh / 6).toFixed(2) : '';
     /* the less sure it is, the wider and softer the halo */
     var hr = 6 + 16 * (1 - c);
     r.halo.setAttribute('cx', X); r.halo.setAttribute('cy', Y); r.halo.setAttribute('r', hr.toFixed(2));
@@ -893,10 +925,11 @@
     if (!anyActive()) { lastT = 0; return; }
     var dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0.016;
     lastT = t;
-    for (var i = 0; i < widgets.length; i++) if (widgets[i].visible) widgets[i].tick(dt);
+    for (var i = 0; i < widgets.length; i++) if (widgets[i].visible) { stepIntro(widgets[i], t); widgets[i].tick(dt); }
     rafId = requestAnimationFrame(frame);
   }
   function kick() {
+    if (reduced() || paused()) widgets.forEach(endIntro);
     if (reduced()) { widgets.forEach(function (w) { w.renderStatic(); }); return; }
     if (!rafId && anyActive()) { lastT = 0; rafId = requestAnimationFrame(frame); }
   }
@@ -948,13 +981,16 @@
     if ('MutationObserver' in window) {
       new MutationObserver(kick).observe(root, { attributes: true, attributeFilter: ['class'] });
     }
-    if (forcedMQ) {
-      var onFC = function () {
-        readColors();
-        widgets.forEach(function (w) { w.layerOk = false; w.fadeGrads = null; w.w = 0; reduced() ? w.renderStatic() : w.resize(); });
-      };
-      if (forcedMQ.addEventListener) forcedMQ.addEventListener('change', onFC); else if (forcedMQ.addListener) forcedMQ.addListener(onFC);
-    }
+    /* forced colours or more contrast: re-read the palette, re-bake the cached layers and redraw,
+       so the hairlines and labels pick up the new values */
+    var onColors = function () {
+      readColors();
+      widgets.forEach(function (w) { w.layerOk = false; w.fadeGrads = null; w.w = 0; reduced() ? w.renderStatic() : w.resize(); });
+    };
+    [forcedMQ, contrastMQ].forEach(function (mq) {
+      if (!mq) return;
+      if (mq.addEventListener) mq.addEventListener('change', onColors); else if (mq.addListener) mq.addListener(onColors);
+    });
     if (reduceMQ) {
       var onRM = function () { widgets.forEach(function (w) { w.started = false; reduced() ? w.renderStatic() : w.resize(); }); kick(); };
       if (reduceMQ.addEventListener) reduceMQ.addEventListener('change', onRM); else if (reduceMQ.addListener) reduceMQ.addListener(onRM);

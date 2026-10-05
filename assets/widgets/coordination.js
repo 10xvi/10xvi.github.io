@@ -29,11 +29,13 @@
   var mobileMQ = mq('(max-width: 759px)');
   var singleMQ = mq('(max-width: 560px)');  // phones: one panel that plays the three stages in turn
   var fcMQ = mq('(forced-colors: active)');
+  var hcMQ = mq('(prefers-contrast: more)');   // site.css swaps in stronger --line, --line-2, --muted, --text
   var DUR = [4.4, 4.6, 7.4];                 // phones: seconds each stage plays before the next
   var HOLD = 6;                              // extra seconds a stage stays after it is picked
   var XF_OUT = 0.16, XF_IN = 0.3;            // phones: fade between stages (seconds)
   var REVEAL_HOLD = 450;                     // ms after the section's reveal before the clock starts
-  /* wider screens: the three cards ease in left to right when the figure first plays (seconds) */
+  /* the entrance when the figure first plays (seconds): the three cards ease in left to right on wider
+     screens, the one card over RAMP on phones */
   var STAG = 0.35, RAMP = 0.6;
   /* card 03 opens with restoration already under way (the first wave has passed and its cohort is
      warming back into step), so a glance across the row never reads 01 beside two copies of 'lost'.
@@ -332,8 +334,9 @@
     this.reduce = !!(reduceMQ && reduceMQ.matches);
     /* the site-wide pause control: html.motion-paused, announced with the site:motion event */
     this.paused = document.documentElement.classList.contains('motion-paused');
-    /* wider screens: the cards' entrance, played once when the figure first runs */
-    this.intro = 0; this.introOn = !this.reduce && !this.paused; this.introHeads = 0;
+    /* the entrance, played once when the figure first runs: the three cards left to right on wider
+       screens, the one card on phones */
+    this.intro = 0; this.introOn = !this.reduce && !this.paused; this.introA = [-1, -1, -1];
     mount.classList.toggle('cw-intro', this.introOn);
     /* hold the clock until the section has faded in, so the first pulses are not spent while it is still rising */
     this.revealedAt = 0;
@@ -385,6 +388,11 @@
       var onFC = function () { self.readColors(); self.render(); };
       if (fcMQ.addEventListener) fcMQ.addEventListener('change', onFC); else if (fcMQ.addListener) fcMQ.addListener(onFC);
     }
+    /* more contrast: re-read the tokens so hairlines, the trace baseline and the out-of-step cells take the stronger values */
+    if (hcMQ) {
+      var onHC = function () { self.readColors(); self.render(); };
+      if (hcMQ.addEventListener) hcMQ.addEventListener('change', onHC); else if (hcMQ.addListener) hcMQ.addListener(onHC);
+    }
     this.update();
   }
   /* pause: stop on the frame in view (a stage cross-fade or the cards' entrance completes at once,
@@ -403,6 +411,16 @@
   Widget.prototype.endIntro = function () {
     if (!this.introOn) return;
     this.introOn = false; this.mount.classList.remove('cw-intro');
+  };
+  /* during the entrance each card's frame and name share its tissue's opacity, so they arrive together */
+  Widget.prototype.introCards = function () {
+    if (!this.introOn) return;
+    for (var i = 0; i < 3; i++) {
+      var a = Math.round(this.alphaOf(this.single ? 0 : i) * 200) / 200;
+      if (a === this.introA[i]) continue;
+      this.introA[i] = a;
+      this.cards[i].style.setProperty('--cw-a', a); this.heads[i].el.style.setProperty('--cw-a', a);
+    }
   };
   /* entrance opacity of card i (1 once the entrance is done) */
   Widget.prototype.alphaOf = function (i) {
@@ -577,7 +595,8 @@
     var dpr = Math.min(window.devicePixelRatio || 1, 2); this.dpr = dpr;
     var vertical = !single && ((mobileMQ && mobileMQ.matches) || W < 640);
     this.vertical = vertical;
-    var rects = [], i, gap, pad, traceH, CW = W, headH = 44;
+    // room for each card's name and rule, which grow with the reader's text size (44 at the default)
+    var rects = [], i, gap, pad, traceH, CW = W, headH = Math.max(44, Math.ceil(this.heads[0].el.offsetHeight) + 14);
     if (single) {
       // one card the width of the column; the three stages take turns in it
       gap = 0; pad = 16; traceH = 40; headH = -6;   // no in-card head: the stage indicator above names the stage
@@ -656,7 +675,7 @@
         if (this.stageT >= this.stageDur) this.goStage((this.stage + 1) % 3, false, false);
       }
       this.syncSteps();
-      if (this.introOn) this.endIntro();
+      if (this.introOn) { this.intro += dt; if (this.intro >= RAMP) this.endIntro(); }
     } else {
       var hold = this.introOn && this.intro < 2 * STAG + RAMP, p2 = this.panels[2];
       p2.held = hold;
@@ -667,8 +686,6 @@
       }
       if (this.introOn) {
         this.intro += dt;
-        var nh = this.intro >= 2 * STAG ? 3 : this.intro >= STAG ? 2 : 1;
-        if (nh !== this.introHeads) { this.introHeads = nh; for (i = 0; i < 3; i++) this.heads[i].el.classList.toggle('on', i < nh); }
         if (this.intro >= 2 * STAG + RAMP) this.endIntro();
       }
       p2.held = false;
@@ -682,6 +699,7 @@
     var ctx = this.ctx, dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.CW, this.H);
+    this.introCards();
     if (this.single) {
       // fade the outgoing stage out, then the new one in
       var a = XF_OUT / (XF_OUT + XF_IN), x = this.xf, show = this.stage, al = 1;
@@ -689,7 +707,7 @@
         if (x < a) { show = this.prevStage; al = 1 - x / a; } else al = (x - a) / (1 - a);
         al = al * al * (3 - 2 * al);
       }
-      ctx.globalAlpha = al;
+      ctx.globalAlpha = al * this.alphaOf(0);
       this.drawTissue(this.panels[show]);
       this.drawTrace(this.panels[show]);
       ctx.globalAlpha = 1;

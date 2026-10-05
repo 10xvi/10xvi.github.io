@@ -17,17 +17,17 @@
   width: 100%;
   height: 248px;
   border: 1px solid var(--line, #e2e8f0);
-  border-radius: 16px;
+  border-radius: var(--r-plate, 16px);
   background:
     radial-gradient(120% 90% at 50% 100%, var(--bg-alt, #f8fafc), rgba(248, 250, 252, 0) 70%),
     var(--bg, #ffffff);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12);
+  box-shadow: var(--shadow-plate, 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12));
   overflow: hidden;
   contain: layout paint;
 }
 @media (max-width: 600px) {
   [data-widget="lifespan"] > .gv-plate,
-  [data-widget="morphology"] .gv-plate { height: 232px; border-radius: 14px; }
+  [data-widget="morphology"] .gv-plate { height: 232px; }
 }
 
 /* morphology: the figure (role="img") fills the tab panel */
@@ -45,7 +45,7 @@
 /* label system (shared; the lifespan key and row labels) */
 [data-widget] .gv-svg .gv-lbl {
   font-family: var(--mono, "JetBrains Mono"), ui-monospace, Menlo, monospace;
-  font-size: 11px;
+  font-size: 0.6875rem; /* 11px at the default 16px; follows the browser text size */
   font-weight: 500;
   letter-spacing: .14em;
   text-transform: uppercase;
@@ -114,9 +114,9 @@
   background: transparent;
   color: var(--muted, #64748b);
   font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
-  font-size: 11px;
+  font-size: 0.6875rem; /* 11px at the default 16px */
   font-weight: 500;
-  line-height: 11px;
+  line-height: 1;
   letter-spacing: .14em;
   text-transform: uppercase;
   text-align: left;
@@ -132,7 +132,7 @@
   position: absolute;
   left: 8px;
   right: 8px;
-  top: 31px;
+  top: calc(20px + 1em); /* 31px at 11px: 14px padding + one line + 6px */
   height: 3px;
   border-radius: 1.5px;
 }
@@ -153,6 +153,14 @@
 }
 @media (prefers-reduced-motion: reduce) {
   [data-widget="morphology"] .gv-tab { transition: none; }
+}
+
+/* More contrast: site.css darkens --line, --line-2, --muted and --text, and every
+   hairline and label here reads those tokens live through var(), so they follow the
+   switch with no redraw. The dashed Today guide drops its faint opacity; the
+   background grid keeps its .75 so it stays behind the data at the darker --line. */
+@media (prefers-contrast: more) {
+  [data-widget="lifespan"] .gv-guide { stroke-opacity: 1; }
 }
 
 /* Forced colours (Windows high contrast): text and essential strokes take system

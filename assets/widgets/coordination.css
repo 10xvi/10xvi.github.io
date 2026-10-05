@@ -4,10 +4,10 @@
 @media (max-width:759px){[data-widget="coordination"]{height:844px}}
 @media (max-width:420px){[data-widget="coordination"]{height:808px}}
 [data-widget="coordination"] > .cw{position:absolute;inset:0}
-[data-widget="coordination"] .cw-card{position:absolute;box-sizing:border-box;background:var(--bg,#fff);border:1px solid var(--line,#e2e8f0);border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -12px rgba(15,23,42,.12)}
+[data-widget="coordination"] .cw-card{position:absolute;box-sizing:border-box;background:var(--bg,#fff);border:1px solid var(--line,#e2e8f0);border-radius:var(--r-plate,16px);box-shadow:var(--shadow-plate,0 1px 2px rgba(15,23,42,.04),0 8px 24px -12px rgba(15,23,42,.12))}
 [data-widget="coordination"] .cw-canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:1}
 [data-widget="coordination"] .cw-head{position:absolute;top:0;left:0;z-index:2;pointer-events:none}
-[data-widget="coordination"] .cw-label{display:flex;align-items:baseline;gap:12px;font-family:var(--mono,"JetBrains Mono"),ui-monospace,monospace;font-size:12px;line-height:1.3;font-weight:500;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+[data-widget="coordination"] .cw-label{display:flex;align-items:baseline;gap:12px;font-family:var(--mono,"JetBrains Mono"),ui-monospace,monospace;font-size:.75rem;line-height:1.3;font-weight:500;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
 [data-widget="coordination"] .cw-num{color:var(--muted,#64748b)}
 [data-widget="coordination"] .cw-name{color:var(--head,#0f172a)}
 [data-widget="coordination"] .cw-s0 .cw-num{color:var(--orange-ink,#c2410c)}
@@ -18,12 +18,12 @@
 [data-widget="coordination"] .cw-s0 .cw-fill{background:linear-gradient(90deg,var(--orange,#f97316),var(--amber,#f59e0b))}
 [data-widget="coordination"] .cw-s1 .cw-fill{background:repeating-linear-gradient(90deg,var(--line-2,#cbd5e1) 0 10px,transparent 10px 18px)}
 [data-widget="coordination"] .cw-s2 .cw-fill{background:linear-gradient(90deg,var(--sky,#0ea5e9),var(--orange,#f97316));transform:scaleX(0)}
-@media (max-width:999px){[data-widget="coordination"] .cw-label{letter-spacing:.14em;gap:9px;font-size:11px}}
-@media (max-width:759px){[data-widget="coordination"] .cw-label{font-size:12px;letter-spacing:.14em;gap:12px}}
+@media (max-width:999px){[data-widget="coordination"] .cw-label{letter-spacing:.14em;gap:9px;font-size:.6875rem}}
+@media (max-width:759px){[data-widget="coordination"] .cw-label{font-size:.75rem;letter-spacing:.14em;gap:12px}}
 [data-widget="coordination"] .cw-track{position:absolute;inset:0}
-/* wider screens: each card's name eases in with its tissue, left to right, the first time the figure plays */
-[data-widget="coordination"].cw-intro .cw-head{opacity:0}
-[data-widget="coordination"].cw-intro .cw-head.on{opacity:1;transition:opacity 600ms cubic-bezier(.2,.7,.2,1)}
+/* the entrance, the first time the figure plays: each card (frame, name and tissue together) eases in,
+   left to right on wider screens, so a frame is never on show without its figure. The script sets --cw-a. */
+[data-widget="coordination"].cw-intro .cw-card,[data-widget="coordination"].cw-intro .cw-head{opacity:var(--cw-a,0)}
 [data-widget="coordination"] .cw-steps{display:none}
 /* phones: one card plays the three stages in turn; the indicator above names them, fills as each one
    plays, and lets the reader jump to a stage */
@@ -34,7 +34,7 @@
   [data-widget="coordination"] .cw-steps{display:flex;gap:12px;position:absolute;left:0;right:0;top:0;height:44px}
   [data-widget="coordination"] .cw-step{all:unset;box-sizing:border-box;flex:1 1 auto;min-width:0;height:44px;display:flex;flex-direction:column;justify-content:center;gap:9px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   [data-widget="coordination"] .cw-step:focus-visible{outline:2px solid var(--orange-ink,#c2410c);outline-offset:3px;border-radius:4px}
-  [data-widget="coordination"] .cw-sl{display:flex;align-items:baseline;gap:8px;font-family:var(--mono,"JetBrains Mono"),ui-monospace,monospace;font-size:11px;line-height:1.2;font-weight:500;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  [data-widget="coordination"] .cw-sl{display:flex;align-items:baseline;gap:8px;font-family:var(--mono,"JetBrains Mono"),ui-monospace,monospace;font-size:.6875rem;line-height:1.2;font-weight:500;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
   [data-widget="coordination"] .cw-sn{color:var(--muted,#64748b);transition:color var(--dur-2,250ms) cubic-bezier(.65,0,.35,1)}
   [data-widget="coordination"] .cw-step.on .cw-sn{color:var(--head,#0f172a)}
   @media (hover:hover){[data-widget="coordination"] .cw-step:hover .cw-sn{color:var(--head,#0f172a)}}

@@ -38,8 +38,6 @@
   --red: #ef4444;
   --indigo: #6366f1;
   --blue: #3b82f6;
-  --green: #10b981;
-  --purple: #a855f7;
   --orange-soft: #fff7ed;
   --sky-soft: #f0f9ff;
   --red-soft: #fef2f2;
@@ -502,7 +500,6 @@ html.gate-locked .hallmarks-head .warn::before { animation-play-state: paused; }
 .imperative { display: grid; grid-template-columns: 7fr 5fr; gap: clamp(32px, 6vw, 88px); align-items: start; margin-top: var(--gap-head); }
 .imperative .text p + p { margin-top: 18px; }
 .imperative .text p { max-width: 60ch; }
-.imperative .text strong { color: var(--orange-ink); }
 .dividend { position: relative; overflow: hidden; padding: clamp(28px, 3vw, 40px); border-radius: var(--r-card); border: 1px solid #bae6fd; background: #fff; box-shadow: var(--shadow); }
 .dividend::before { content: ""; position: absolute; top: -40%; right: -30%; width: 80%; height: 80%; border-radius: 50%; background: radial-gradient(circle, rgba(14, 165, 233, .14), rgba(14, 165, 233, 0) 70%); pointer-events: none; }
 .dividend > * { position: relative; }
@@ -568,7 +565,7 @@ html.gate-locked .hallmarks-head .warn::before { animation-play-state: paused; }
 .site-foot { border-top: 1px solid var(--line); padding: 26px 0 36px; color: var(--muted); background: #fff; }
 .site-foot .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .site-foot .copyright { font-size: 0.8125rem; }
-/* One switch, two places: a quiet icon in the bar, a labelled button in the footer. */
+/* One switch, three places: a quiet icon in the bar (a labelled row in the menu on phones), a labelled button in the footer. */
 html:not(.js) [data-motion-toggle] { display: none; }
 [data-motion-toggle] svg { fill: currentColor; stroke: none; }
 [data-motion-toggle] .i-play, [data-motion-toggle].is-paused .i-pause { display: none; }
@@ -583,11 +580,20 @@ html:not(.js) [data-motion-toggle] { display: none; }
 .motion-toggle svg { width: 12px; height: 12px; }
 .motion-toggle:hover { color: var(--orange-ink); }
 .motion-toggle.is-paused { color: var(--orange-ink); }
+/* Wrapped under the copyright (phones), the pause glyph meets the gutter: the switch gives back its 2px padding and the glyph's 3px inset,
+   and the copyright takes the same 5px so the wrap point and the one-line spacing do not move. */
+.site-foot .copyright { margin-right: 5px; }
+.site-foot .motion-toggle { margin-left: -5px; }
 @media (max-width: 73.75em) {
   .motion-btn { width: 44px; height: 44px; margin: 0 -12px 0 0; }
 }
+.menu-motion { display: none; }
+/* Phone: the bar keeps its room for the section chip; the switch moves to the last row of the open menu. */
 @media (max-width: 640px) {
-  .motion-btn { margin-right: -4px; }
+  .motion-btn { display: none; }
+  .mobile-menu .menu-motion { display: flex; width: 100%; min-height: 48px; margin: 0; padding: 0 var(--gutter); border-top: 1px solid var(--line); border-radius: 0; text-align: left; transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+  .mobile-menu .menu-motion:hover, .mobile-menu .menu-motion:active { background: var(--bg-alt); }
+  .mobile-menu .menu-motion:focus-visible { outline-offset: -3px; }
 }
 
 /* ---------- 16 More contrast ---------- */
