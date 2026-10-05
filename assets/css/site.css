@@ -223,15 +223,15 @@ html.menu-open .nav::after { opacity: 0; }
 .hero-in { position: relative; z-index: 2; width: 100%; padding-top: 128px; padding-bottom: 120px; }
 .hero h1 { font-family: var(--display); font-weight: 700; color: var(--head); font-size: clamp(3.25rem, 8.4vw, 8rem); line-height: .92; letter-spacing: -.045em; }
 .hero h1 .x, .hero h1 .y { display: block; }
-/* The 10X is alive, as on the original site: its colours slide between warm and sky and back every 6s.
-   The crossover runs through bright gold and cyan in a narrow seam, so no glyph ever turns olive.
-   Still (reduced motion): warm "10", sky "X", with the seam in the gap before the "X". */
+/* The 10X breathes, as on the original site and with its colours: it rests on orange, then slowly
+   breathes out to orange, green and blue across the letters (never all blue), and back. 12s per breath,
+   sine-eased so it lingers at each end. Still (reduced motion): orange. */
 .hero h1 .gradient-text {
   width: fit-content;
-  background: linear-gradient(90deg, #ea580c 0%, #f97316 18%, #f59e0b 38%, #facc15 46%, #22d3ee 54%, #0ea5e9 62%, #0284c7 100%);
-  background-size: 200% auto; background-position: 37% 50%;
+  background: linear-gradient(to right, #f97316, #f59e0b, #0ea5e9);
+  background-size: 200% auto; background-position: 0% 50%;
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  animation: x-shift 6s var(--ease-in-out) infinite;
+  animation: x-shift 12s cubic-bezier(.37, 0, .63, 1) infinite;
 }
 @keyframes x-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 html.gate-locked .hero h1 .gradient-text { animation-play-state: paused; }
@@ -243,7 +243,7 @@ html.gate-locked .hero h1 .gradient-text { animation-play-state: paused; }
 /* Entrance after the gate: the type leads, the field settles in behind it (site.js adds html.hero-enter). */
 @keyframes hero-rise { from { opacity: 0; transform: translateY(14px); } }
 @keyframes hero-fade { from { opacity: 0; } }
-html.hero-enter .hero h1 .x { animation: hero-rise var(--dur-4) var(--ease-out) both, x-shift 6s var(--ease-in-out) infinite; }
+html.hero-enter .hero h1 .x { animation: hero-rise var(--dur-4) var(--ease-out) both, x-shift 12s cubic-bezier(.37, 0, .63, 1) infinite; }
 html.hero-enter .hero h1 .y { animation: hero-rise var(--dur-4) var(--ease-out) 70ms both; }
 html.hero-enter .hero p { animation: hero-rise var(--dur-4) var(--ease-out) 140ms both; }
 html.hero-enter .hero .actions { animation: hero-rise var(--dur-4) var(--ease-out) 210ms both; }

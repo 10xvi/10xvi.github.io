@@ -11,7 +11,7 @@
   function isChosen() { return root.classList.contains('bg-original'); }
 
   var PALETTE = [[0.976, 0.451, 0.086], [1.0, 0.843, 0.0], [0.055, 0.647, 0.914]]; /* #f97316 #ffd700 #0ea5e9 */
-  var STEP = 0.003;      /* the original advanced its clock by 0.003 every frame; kept per frame so it feels the same on any display */
+  var SPEED = 0.18;      /* the original's calm pace: 0.003 per frame at 60 fps, held in real time so a faster display doesn't speed it up */
   var SIZE = 1.2;        /* point size in world units, as in the original material */
   var FOV = 75, NEAR = 0.1, FAR = 1000;
 
@@ -63,7 +63,7 @@
     var OPACITY = calm ? 0.5 : 0.9;
     var gl = null, prog = null, loc = {}, lost = false, failed = false;
     var w = 0, h = 0, dpr = 1;
-    var visible = false, running = false, raf = 0, t = 0, shownOnce = false;
+    var visible = false, running = false, raf = 0, last = 0, t = 0, shownOnce = false;
 
     function compile(type, src) {
       var s = gl.createShader(type);
@@ -150,15 +150,17 @@
       gl.drawArrays(gl.POINTS, 0, COUNT);
       if (!shownOnce) { shownOnce = true; cv.classList.add('is-on'); }
     }
-    function frame() {
+    function frame(now) {
       raf = 0;
       if (!running) return;
-      t += STEP;
+      var dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+      last = now;
+      t += dt * SPEED;
       draw();
       raf = requestAnimationFrame(frame);
     }
     function stop() {
-      running = false;
+      running = false; last = 0;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
     }

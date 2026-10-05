@@ -147,6 +147,9 @@
     return a;
   };
 
+  /* the whole field runs at a calm, breathing pace: waves, drift and episodes all slowed together */
+  var PACE = 0.6;
+
   /* ---------- one field per canvas ---------- */
   function Field(cv) {
     var ctx = cv.getContext('2d');
@@ -761,6 +764,7 @@
       last = now;
       if (!(dt > 0)) dt = 1 / 60;
       if (dt > .1) dt = .1;
+      dt *= PACE;
       t += dt;
       /* the hero does not move on the page, but re-check its box now and then (about every 1.5 s) */
       if (ptrOn && ++boxAge > 90) measure();
