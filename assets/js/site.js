@@ -166,6 +166,33 @@
     });
     syncMotion();
 
+    // ---------- Background: the original particle field or the new cell field ----------
+    var bgBtns = document.querySelectorAll('[data-bg-toggle]');
+    function isOriginalBg() { return root.classList.contains('bg-original'); }
+    function syncBg() {
+        var o = isOriginalBg();
+        var label = o ? 'Use new background' : 'Use original background';
+        bgBtns.forEach(function (b) {
+            var text = b.querySelector('.bg-label');
+            if (text) text.textContent = label;
+            else { b.setAttribute('aria-label', label); b.setAttribute('title', label); }
+            b.classList.toggle('is-original', o);
+        });
+    }
+    function setBg(o) {
+        root.classList.toggle('bg-original', o);
+        try {
+            if (o) localStorage.setItem('10x-bg', 'original');
+            else localStorage.removeItem('10x-bg');
+        } catch (err) {}
+        syncBg();
+        document.dispatchEvent(new CustomEvent('site:bg', { bubbles: true, detail: { original: o } }));
+    }
+    bgBtns.forEach(function (b) {
+        b.addEventListener('click', function () { setBg(!isOriginalBg()); });
+    });
+    syncBg();
+
     // ---------- Reveal on scroll ----------
     var reveals = document.querySelectorAll('.reveal');
     var revealer = null;

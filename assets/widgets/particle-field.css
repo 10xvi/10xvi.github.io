@@ -1,0 +1,15 @@
+/* particle-field: the original background, shown when the visitor picks it (html.bg-original).
+   The page positions the canvas; this file only fades it in once the first frame is drawn. */
+canvas[data-widget="particle-field"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s cubic-bezier(.22, .61, .36, 1);
+}
+canvas[data-widget="particle-field"].is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  canvas[data-widget="particle-field"] { transition: none; }
+}
+html.motion-paused canvas[data-widget="particle-field"] { transition: none; }

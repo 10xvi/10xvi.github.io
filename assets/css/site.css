@@ -211,7 +211,7 @@ html.menu-open .nav::after { opacity: 0; }
 
 /* ---------- 05 Hero ---------- */
 .hero { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; overflow: hidden; background: radial-gradient(80% 70% at 78% 40%, #fff7ed 0%, rgba(255, 247, 237, 0) 60%), radial-gradient(60% 60% at 90% 80%, #f0f9ff 0%, rgba(240, 249, 255, 0) 60%), #fff; }
-.hero [data-widget="hero-field"] { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hero [data-widget="hero-field"], .hero [data-widget="particle-field"] { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* The headline and lede stay on near-white at every width. */
 .hero::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -537,7 +537,7 @@ html.gate-locked .hallmarks-head .warn::before { animation-play-state: paused; }
 /* ---------- 14 08 Invitation ---------- */
 .invite { --pad-top: clamp(104px, 11vw, 160px); position: relative; overflow: hidden; text-align: center; padding: var(--pad-top) 0 clamp(96px, 10vw, 144px); background: #fff; border-top: 1px solid var(--line); scroll-margin-top: calc(32px - var(--pad-top)); }
 .invite::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(14, 165, 233, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(14, 165, 233, .06) 1px, transparent 1px); background-size: 40px 40px; -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent); mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent); pointer-events: none; }
-.invite [data-widget="hero-field"] { position: absolute; inset: 0; width: 100%; height: 100%; }
+.invite [data-widget="hero-field"], .invite [data-widget="particle-field"] { position: absolute; inset: 0; width: 100%; height: 100%; }
 .invite::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(46% 54% at 50% 50%, rgba(255, 255, 255, .95) 0%, rgba(255, 255, 255, .6) 68%, rgba(255, 255, 255, 0) 100%); }
 .invite .wrap { position: relative; z-index: 2; max-width: 860px; }
 .invite .label { justify-content: center; }
@@ -636,3 +636,19 @@ html.motion-paused .hallmarks-head .warn::before { animation: none; }
 html.motion-paused.hero-enter .hero h1 .x, html.motion-paused.hero-enter .hero h1 .y, html.motion-paused.hero-enter .hero p, html.motion-paused.hero-enter .hero .actions, html.motion-paused.hero-enter .scroll-cue, html.motion-paused.hero-enter .nav-in { animation: none; }
 html.motion-paused .cta:hover, html.motion-paused .cta:active, html.motion-paused .cta:focus-visible, html.motion-paused .cta-ghost:hover svg, html.motion-paused .menu-btn:active, html.motion-paused .mobile-menu a.go:active, html.motion-paused .motion-btn:active { transform: none; }
 html.motion-paused .links a:not(.cta)::after, html.motion-paused .nav, html.motion-paused .nav::before, html.motion-paused .nav::after, html.motion-paused .where { transition: none; }
+
+/* ---------- Background switch: the original particle field or the new cell field ---------- */
+/* Lives beside the pause switch (nav bar; a menu row on phones). Saved in localStorage "10x-bg". */
+html:not(.bg-original) canvas[data-widget="particle-field"] { display: none; }
+html.bg-original canvas[data-widget="hero-field"] { display: none; }
+html.bg-original:not(.no-webgl) .hero { background: #fff; }
+html.bg-original:not(.no-webgl) .hero::after { background: radial-gradient(58% 64% at 27% 50%, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .55) 50%, rgba(255, 255, 255, 0) 82%), linear-gradient(0deg, #fff 0%, rgba(255, 255, 255, 0) 24%); }
+html:not(.js) [data-bg-toggle] { display: none; }
+[data-bg-toggle] svg { fill: none; stroke: currentColor; }
+[data-bg-toggle] .i-cells, [data-bg-toggle].is-original .i-orig { display: none; }
+[data-bg-toggle].is-original .i-cells { display: block; }
+.bg-btn svg { width: 16px; height: 16px; }
+@media (min-width: 73.8125em) { .bg-btn { margin-left: -16px; } }
+/* no WebGL on this device: the new background stays and the switch is hidden */
+html.no-webgl canvas[data-widget="particle-field"], html.no-webgl [data-bg-toggle] { display: none; }
+html.bg-original.no-webgl canvas[data-widget="hero-field"] { display: block; }
