@@ -79,12 +79,36 @@
     last = now;
     for (var i = 0; i < widgets.length; i++) {
       var w = widgets[i];
-      if (w.visible) { w.t += dt; w.draw(); }
+      if (!w.visible) continue;
+      var was = w.t;
+      w.t += dt;
+      // a staggered clock (t < 0) holds its first frame, so there is nothing to redraw yet
+      if (!(was < 0 && w.t < 0)) w.draw();
     }
     if (active()) raf = requestAnimationFrame(tick); else last = 0;
   }
   function kick() {
     if (!raf && active()) { last = 0; raf = requestAnimationFrame(tick); }
+  }
+
+  // a figure's clock starts once this much of its plate is in view (then runs while any of it is)
+  var START_RATIO = 0.35;
+  // side-by-side goal cards: the morphology starts this much later, so the eye takes the lifespan first
+  var STAGGER = 1.2;
+
+  /* Wait for the card's reveal (site.js adds .in) before a clock may run, so a
+     figure never plays under a fading wrapper. Returns true when already clear. */
+  function watchReveal(el, w, update) {
+    var rv = el.closest ? el.closest('.reveal') : null;
+    if (!rv || rv.classList.contains('in') || !root.classList.contains('js') || !('MutationObserver' in window)) return true;
+    var mo = new MutationObserver(function () {
+      if (!rv.classList.contains('in')) return;
+      mo.disconnect();
+      // let the card's fade get well under way (it runs 900ms) before the figure starts
+      setTimeout(function () { w.ready = true; update(); kick(); }, reduce ? 0 : 480);
+    });
+    mo.observe(rv, { attributes: true, attributeFilter: ['class'] });
+    return false;
   }
 
   function mount(el, factory) {
@@ -95,7 +119,16 @@
     var svg = mk('svg', { 'class': 'gv-svg', 'aria-hidden': 'true', focusable: 'false' }, box);
     var w = factory(svg, box, el);
     w.el = el; w.t = 0; w.visible = false; w.W = 0; w.H = 0;
+    w.delay = 0; w.started = false; w.ratio = 0;
+    function update() {
+      var on = !!w.ready && w.ratio > 0 && (w.started || w.ratio >= START_RATIO);
+      // a figure the reader has already operated (a tab chosen early) skips the stagger
+      if (on && !w.started) { w.started = true; if (!w.touched) w.t = -w.delay; }
+      w.visible = on;
+    }
+    w.ready = watchReveal(el, w, update);
     function layout() {
+      pairCheck();
       var r = svg.getBoundingClientRect();
       var W = Math.round(r.width), H = Math.round(r.height);
       if (W < 40 || H < 40 || (W === w.W && H === w.H)) return;
@@ -118,14 +151,29 @@
     }
     if ('IntersectionObserver' in window) {
       new IntersectionObserver(function (ents) {
-        ents.forEach(function (e) { w.visible = e.isIntersecting && e.intersectionRatio >= 0.2; });
+        ents.forEach(function (e) { w.ratio = e.isIntersecting ? Math.max(e.intersectionRatio, 0.001) : 0; });
+        update();
         kick();
-      }, { threshold: [0, 0.2, 0.5, 1] }).observe(box);
+      }, { threshold: [0, START_RATIO, 0.6, 1] }).observe(box);
     } else {
-      w.visible = true;
+      w.ratio = 1; w.ready = true; update();
     }
     widgets.push(w);
+    pairCheck();
     return w;
+  }
+
+  /* The two goal cards share a row on wide screens: stagger the morphology
+     (right) after the lifespan (left). Stacked in one column, no offset. */
+  function pairCheck() {
+    var L = null, M = null;
+    for (var i = 0; i < widgets.length; i++) {
+      if (widgets[i].kind === 'lifespan' && !L) L = widgets[i];
+      if (widgets[i].kind === 'morphology' && !M) M = widgets[i];
+    }
+    if (!L || !M || M.started) return;
+    var same = Math.abs(L.el.getBoundingClientRect().top - M.el.getBoundingClientRect().top) < 4;
+    M.delay = same && !reduce ? STAGGER : 0;
   }
 
   /* =========================================================
@@ -256,8 +304,9 @@
       return xh;
     }
 
-    // timeline (seconds since first in view)
-    var T_A = 0.25, T_B = 1.35, GROW = 3.2, T_SH = T_B + GROW + 0.9, SH_P = 7.5;
+    // timeline (seconds since first in view). The 10X span grows on an ease-out,
+    // so most of its length is there early and the slow-down reads as reaching.
+    var T_A = 0.15, T_B = 0.75, GROW = 1.9, T_SH = T_B + GROW + 0.9, SH_P = 7.5;
 
     function draw() {
       if (!S.rows) return;
@@ -270,7 +319,7 @@
       A.g.setAttribute('opacity', f(0.7 + 0.3 * lab));
       B.g.setAttribute('opacity', f(0.7 + 0.3 * easeOut(seg(t, T_B - 0.6, T_B + 0.2))));
       track(A, 1, easeOut(seg(t, T_A, T_A + 0.8)), ease(seg(t, T_A + 0.7, T_A + 1.6)));
-      var pg = ease(seg(t, T_B, T_B + GROW));
+      var pg = easeOut(seg(t, T_B, T_B + GROW));
       var xh = track(B, 10, pg, ease(seg(t, T_B + GROW - 0.05, T_B + GROW + 0.6)));
       S.guide.setAttribute('opacity', f(easeOut(seg(t, T_B - 0.4, T_B + 0.4))));
 
@@ -307,7 +356,7 @@
       }
     }
 
-    return { build: build, draw: draw };
+    return { kind: 'lifespan', build: build, draw: draw };
   }
 
   /* =========================================================
@@ -392,6 +441,7 @@
       try { fv = e.target.matches(':focus-visible'); } catch (_) {}
       if (!fv) return;
       S.kb = true;
+      wake();
       if (!S.hold && !reduce && self) {
         var T = self.t + S.off, c = Math.floor(T / CYC), lt = T - c * CYC;
         var p = lt < D_M ? 0 : lt < D_M + D_R ? 1 : 2;
@@ -411,14 +461,20 @@
     stage.appendChild(tabs);
     stage.appendChild(box);
 
+    // a choice made during the stagger delay starts the clock at once
+    function wake() { if (!self) return; self.touched = true; if (self.t < 0) self.t = 0; }
+
     function goTo(p) {
       if (!self) return;
       if (reduce) { S.rsel = p; self.draw(); return; }
+      wake();
       var T = self.t + S.off, c = Math.floor(T / CYC), lt = T - c * CYC;
       // once the form has started to change in Shape, the next cycle continues from the new form
       if (lt > D_M + D_R + 1.0) c += 1;
       var start = c * CYC + PH_START[p];
       S.from = S.last ? { q: S.last, t0: self.t } : null;
+      // a jump straight to Shape skips Repair, so there is no healed seam to carry over
+      S.noSeam = p === 2;
       S.off = start - self.t;
       S.hold = { end: start + PH_DUR[p] - 0.001, until: self.t + HOLD };
       self.draw();
@@ -461,6 +517,7 @@
       }
       S.heal = mk('path', { 'class': 'gv-heal', opacity: 0 }, svg);
       S.main = mk('path', { 'class': 'gv-form' }, svg);
+      S.seam = mk('path', { 'class': 'gv-seam', opacity: 0 }, svg);
       S.dmg = mk('path', { 'class': 'gv-form' }, svg);
       S.dmgR = mk('path', { 'class': 'gv-dmg', opacity: 0 }, svg);
     }
@@ -479,7 +536,7 @@
 
     function draw() {
       if (!S.P) return;
-      var now = self.t, cyc, lt;
+      var now = Math.max(0, self.t), cyc, lt;
       if (reduce) { cyc = 0; lt = PH_STILL[S.rsel]; }
       else {
         var T = now + S.off;
@@ -508,28 +565,40 @@
         ghostLift = clamp((ease(seg(ls, 0.15, 1.25)) - ease(seg(ls, 1.0, 3.8))) * 3, 0, 1);
       }
 
-      // damage + healing (Repair)
-      var dmg = 0, healGlow = 0;
+      // damage + healing (Repair). The cut lands at 8% of the phase; the target
+      // (sky ghost) and the red wound edge stay on from 8% to 80% while the contour
+      // eases back; a faint sky seam then marks the healed arc until the tab changes.
+      var dmg = 0, healGlow = 0, mark = 0, rec = 0, seam = 0;
       if (phase === 1) {
-        var lr = lt - D_M;
-        dmg = easeOut(seg(lr, 0.2, 1.2)) * (1 - ease(seg(lr, 2.0, 4.8)));
-        healGlow = Math.sin(Math.PI * seg(lr, 1.9, 5.2));
+        var cut = easeOut(seg(pp, 0.06, 0.13));
+        rec = ease(seg(pp, 0.26, 0.8));
+        dmg = cut * (1 - rec);
+        mark = cut * (1 - easeOut(seg(pp, 0.78, 0.86)));
+        healGlow = Math.sin(Math.PI * seg(pp, 0.24, 0.84));
+        seam = easeOut(seg(pp, 0.8, 0.9));
+      } else if (phase === 2 && !S.noSeam) {
+        // the seam stays with the healed form as the next phase opens, then lets go
+        seam = 1 - easeOut(seg(lt - D_M - D_R, 0, 0.6));
       }
+      if (phase !== 2) S.noSeam = false;
       var th0 = NOTCH_AT[fi];
 
       // after a jump between phases, ease from what was on screen instead of snapping
-      var Q = { cOut: cOut, cIn1: cIn1, cIn2: cIn2, cGhost: cGhost, gl: ghostLift, dmg: dmg, heal: healGlow, th0: th0 };
+      var Q = { cOut: cOut, cIn1: cIn1, cIn2: cIn2, cGhost: cGhost, gl: ghostLift, dmg: dmg, heal: healGlow, th0: th0,
+        mark: mark, rec: rec, seam: seam };
       if (S.from && !reduce) {
         var k = (now - S.from.t0) / BLEND;
         if (k >= 1 || k < 0) S.from = null;
         else {
           var q = S.from.q, e = ease(k);
           Q = { cOut: mix(q.cOut, cOut, e), cIn1: mix(q.cIn1, cIn1, e), cIn2: mix(q.cIn2, cIn2, e), cGhost: mix(q.cGhost, cGhost, e),
-            gl: lerp(q.gl, ghostLift, e), dmg: lerp(q.dmg, dmg, e), heal: lerp(q.heal, healGlow, e), th0: lerp(q.th0, th0, e) };
+            gl: lerp(q.gl, ghostLift, e), dmg: lerp(q.dmg, dmg, e), heal: lerp(q.heal, healGlow, e), th0: lerp(q.th0, th0, e),
+            mark: lerp(q.mark, mark, e), rec: lerp(q.rec, rec, e), seam: lerp(q.seam, seam, e) };
         }
       }
       S.last = Q;
       cOut = Q.cOut; cIn1 = Q.cIn1; cIn2 = Q.cIn2; cGhost = Q.cGhost; ghostLift = Q.gl; dmg = Q.dmg; healGlow = Q.heal; th0 = Q.th0;
+      mark = Q.mark; rec = Q.rec; seam = Q.seam;
       var NW = 0.62, ND = 0.24 * dmg;
 
       // breathing (continuous, never resets)
@@ -543,6 +612,10 @@
 
       var outer = pathOf(rO, 0, TAU, N, true);
       S.fill.setAttribute('d', outer);
+      // entrance: the inner structure eases in over 600ms when the clock starts
+      var ent = reduce ? 1 : easeOut(seg(self.t, 0, 0.6));
+      S.in1.setAttribute('opacity', f(0.5 * (0.35 + 0.65 * ent)));
+      S.in2.setAttribute('opacity', f(0.3 * (0.35 + 0.65 * ent)));
       S.in1.setAttribute('d', pathOf(function (th) { return smin(0.78 * rT(cIn1, th), rO(th) - 0.07, 0.035); }, 0, TAU, N, true));
       S.in2.setAttribute('d', pathOf(function (th) { return smin(0.56 * rT(cIn2, th), rO(th) - 0.16, 0.035); }, 0, TAU, N, true));
 
@@ -551,13 +624,18 @@
       S.main.setAttribute('d', pathOf(rO, th0 + aw, th0 + TAU - aw, N, false));
       S.dmg.setAttribute('d', pathOf(rO, th0 - aw, th0 + aw, 24, false));
       var dmgArc = pathOf(rO, th0 - aw, th0 + aw, 24, false);
-      S.dmg.setAttribute('opacity', f(1 - dmg));
+      // the orange rim regrows under the red edge as the contour heals
+      S.dmg.setAttribute('opacity', f(Math.max(1 - mark, 0.75 * rec)));
       S.dmgR.setAttribute('d', dmgArc);
-      S.dmgR.setAttribute('opacity', f(0.85 * dmg));
+      S.dmgR.setAttribute('opacity', f(0.85 * mark));
+      // the seam runs just outside the rim, so it reads beside the orange stroke rather than under it
+      var so = 3.5 / S.R;
+      S.seam.setAttribute('d', seam > 0.001 ? pathOf(function (th) { return rO(th) + so; }, th0 - aw * 0.8, th0 + aw * 0.8, 20, false) : '');
+      S.seam.setAttribute('opacity', f(0.55 * seam));
       S.heal.setAttribute('d', pathOf(rO, th0 - aw * 1.2, th0 + aw * 1.2, 28, false));
       // the target pattern shows through where the form has been damaged
       S.ghostN.setAttribute('d', pathOf(function (th) { return rAt(cGhost, th); }, th0 - aw * 0.8, th0 + aw * 0.8, 24, false));
-      S.ghostN.setAttribute('opacity', f(0.9 * easeOut(Math.min(1, dmg * 1.6))));
+      S.ghostN.setAttribute('opacity', f(0.9 * mark));
       S.heal.setAttribute('opacity', f(0.38 * healGlow));
 
       // tissue pattern: dots hold their place in the form and regrow in the notch
@@ -568,7 +646,7 @@
         var a = clamp((have - want) / 0.07, 0, 1);
         var p = pt(Math.min(want, have + 0.03), th);
         D.el.setAttribute('cx', f(p[0])); D.el.setAttribute('cy', f(p[1]));
-        D.el.setAttribute('opacity', f((0.34 + 0.32 * (1 - D.rho)) * a));
+        D.el.setAttribute('opacity', f((0.34 + 0.32 * (1 - D.rho)) * a * (0.3 + 0.7 * ent)));
       }
 
       // tabs: selection changes only on phase change; the progress bar fills each frame
@@ -585,7 +663,7 @@
       S.tabs[phase].style.setProperty('--p', reduce ? '1' : f(pp));
     }
 
-    self = { build: build, draw: draw, reset: function () { S.off = 0; S.hold = null; S.from = null; } };
+    self = { kind: 'morphology', build: build, draw: draw, reset: function () { S.off = 0; S.hold = null; S.from = null; } };
     return self;
   }
 
@@ -612,7 +690,12 @@
     // inspection hook (no effect unless called): seek all widgets to time t
     window.__goalVisuals = {
       seek: function (t) { widgets.forEach(function (w) { w.t = t; if (w.reset) w.reset(); w.draw(); }); },
-      times: function () { return widgets.map(function (w) { return w.t; }); }
+      times: function () { return widgets.map(function (w) { return w.t; }); },
+      state: function () {
+        return { running: !!raf, widgets: widgets.map(function (w) {
+          return { kind: w.kind, t: w.t, visible: w.visible, ratio: w.ratio, started: w.started, ready: w.ready, delay: w.delay };
+        }) };
+      }
     };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

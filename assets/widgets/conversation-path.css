@@ -85,3 +85,68 @@
 @supports not (aspect-ratio: 1 / 1) {
   [data-widget="path"] .cpw-stage { height: 0; padding-bottom: 100%; }
 }
+
+/* ---- path stages: the stage being read fills its dot, and the rings follow it (conversation-path.js) ---- */
+.path.cpw-staged .stages li::after {
+  transition: background-color var(--dur-2, 250ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)),
+              border-color var(--dur-2, 250ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)),
+              box-shadow var(--dur-2, 250ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
+}
+/* the fixed "First" fill becomes the default state: an outline until it is the stage being read */
+.path.cpw-staged .stages li:first-child::after {
+  background: var(--bg, #fff);
+  border-color: var(--orange, #f97316);
+  box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+}
+.path.cpw-staged .stages li.is-active::after {
+  background: var(--sky, #0ea5e9);
+  border-color: var(--sky, #0ea5e9);
+  box-shadow: 0 0 0 5px var(--sky-soft, #f0f9ff);
+}
+.path.cpw-staged .stages li:first-child.is-active::after {
+  background: var(--orange, #f97316);
+  border-color: var(--orange, #f97316);
+  box-shadow: 0 0 0 5px var(--orange-soft, #fff7ed);
+}
+
+/* phones and portrait tablets: the rings pin under the nav while the three stages scroll beneath,
+   so the ring a stage describes stays in view while it is read (the same pattern as the loop).
+   An opaque band in the section tint, full bleed, keeps the passing text from showing through. */
+@media (max-width: 960px) and (min-height: 600px) {
+  .path > .widget[data-widget="path"] {
+    position: sticky;
+    top: 76px;
+    z-index: 1;
+    width: 100%;
+    max-width: min(520px, 44vh);
+    max-width: min(520px, 44svh);   /* svh: no resize while a phone's toolbar slides */
+    /* the pin releases early, so the rings leave together with the last stage instead of covering it;
+       the list's matching negative margin keeps the layout exactly where it was */
+    margin-bottom: 120px;
+  }
+  .path > .widget[data-widget="path"] + .stages { margin-top: -120px; }
+  .path > .widget[data-widget="path"]::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    top: -12px;
+    bottom: -28px;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(to bottom, var(--bg-alt, #f8fafc) 0, var(--bg-alt, #f8fafc) calc(100% - 22px), rgba(248, 250, 252, 0) 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .path.cpw-staged .stages li::after { transition: none; }
+}
+
+/* wide screens: the rings stay centred beside the stages, and hold in view while the last one is read */
+@media (min-width: 961px) and (min-height: 700px) {
+  .path > .widget[data-widget="path"] {
+    position: sticky;
+    top: max(96px, calc(50vh - 270px));
+  }
+}

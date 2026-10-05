@@ -27,7 +27,11 @@
   var mq = function (q) { return window.matchMedia ? window.matchMedia(q) : null; };
   var reduceMQ = mq('(prefers-reduced-motion: reduce)');
   var mobileMQ = mq('(max-width: 759px)');
-  var swipeMQ = mq('(max-width: 560px)');   // phones: the three stages become a row you swipe through
+  var singleMQ = mq('(max-width: 560px)');  // phones: one panel that plays the three stages in turn
+  var DUR = [4.4, 4.6, 7.4];                 // phones: seconds each stage plays before the next
+  var HOLD = 6;                              // extra seconds a stage stays after it is picked
+  var XF_OUT = 0.16, XF_IN = 0.3;            // phones: fade between stages (seconds)
+  var REVEAL_HOLD = 450;                     // ms after the section's reveal before the clock starts
 
   function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
@@ -167,6 +171,11 @@
     return this.mode === 'sync' ? 1 : this.mode === 'lost' ? 0 : cell.c;
   };
   Panel.prototype.target = function (cell, T) { return OMEGA * T - KAPPA * cell.u + cell.eps; };
+  /* where the restore loop is at time T. On phones the stage starts its own cycle (t0) and holds the
+     restored state instead of letting the cells drift apart again. */
+  Panel.prototype.cycAt = function (T) {
+    return this.t0 != null ? clamp(T - this.t0, 0, DECAY - 1e-3) : mod(T, RC);
+  };
   Panel.prototype.clearBuf = function () { this.bt = []; this.bm = []; this.bc = []; this.bs = []; this.bsc = []; for (var k = 0; k < this.samples.length; k++) { this.bs.push([]); this.bsc.push([]); } };
   Panel.prototype.sample = function (T) {
     var cells = this.cells, sm = 0, sc = 0, ns = this.samples.length;
@@ -197,7 +206,7 @@
   Panel.prototype.step = function (T, dt) {
     var cells = this.cells, i, ce;
     if (this.mode === 'restore') {
-      var cyc = mod(T, RC), prev = cyc - dt;
+      var cyc = this.cycAt(T), prev = this.cycAt(T - dt);
       if (cyc >= DECAY) {
         for (i = 0; i < cells.length; i++) cells[i].eT = 0;
       } else {
@@ -264,10 +273,11 @@
   /* ---------------- Widget ---------------- */
   function Widget(mount) {
     this.mount = mount;
-    if (!mount.getAttribute('role')) mount.setAttribute('role', 'img');
-    if (!mount.getAttribute('aria-label')) mount.setAttribute('aria-label', 'Three views of the same tissue: cells in step, cells out of step, and an incoming signal bringing them back into step.');
+    /* the drawing carries the image role, so the stage buttons (phones) can sit beside it in the mount */
+    var label = mount.getAttribute('aria-label') || 'Three views of the same tissue: cells in step, cells out of step, and an incoming signal bringing them back into step.';
+    mount.removeAttribute('role'); mount.removeAttribute('aria-label');
     mount.innerHTML = '';
-    var root = document.createElement('div'); root.className = 'cw'; root.setAttribute('aria-hidden', 'true');
+    var root = document.createElement('div'); root.className = 'cw'; root.setAttribute('role', 'img'); root.setAttribute('aria-label', label);
     var track = document.createElement('div'); track.className = 'cw-track'; root.appendChild(track);
     this.cards = []; this.heads = [];
     var i;
@@ -282,22 +292,36 @@
       h.innerHTML = '<span class="cw-label"><span class="cw-num">0' + (i + 1) + '</span><span class="cw-name">' + NAMES[i] + '</span></span><span class="cw-rule"><span class="cw-fill"></span></span>';
       track.appendChild(h); this.heads.push({ el: h, name: h.querySelector('.cw-name'), fill: h.querySelector('.cw-fill') });
     }
-    mount.appendChild(root);
-    // stage dots for the swipe layout (pointer helpers; the figure itself is described by the mount's label)
-    var dots = document.createElement('div'); dots.className = 'cw-dots'; dots.setAttribute('aria-hidden', 'true');
-    this.dots = [];
+    /* phones: the stage indicator. Each segment names a stage and fills while it plays; tapping one
+       jumps to that stage and lets it play longer before moving on. Hidden (so not focusable) on wider screens. */
+    var steps = document.createElement('div'); steps.className = 'cw-steps'; steps.setAttribute('role', 'group'); steps.setAttribute('aria-label', 'Stages');
+    this.steps = [];
     for (i = 0; i < 3; i++) {
-      // plain elements, not buttons: the mount is role="img", which must not contain focusable controls
-      var d = document.createElement('span'); d.className = 'cw-dot cw-d' + i;
-      d.appendChild(document.createElement('span'));
-      d.addEventListener('click', this.goTo.bind(this, i));
-      dots.appendChild(d); this.dots.push(d);
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'cw-step cw-t' + i;
+      b.innerHTML = '<span class="cw-sl"><span class="cw-num">0' + (i + 1) + '</span><span class="cw-sn">' + SHORT[i] + '</span></span><span class="cw-bar"><span class="cw-bf"></span></span>';
+      b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      b.addEventListener('click', this.pick.bind(this, i));
+      steps.appendChild(b); this.steps.push({ el: b, fill: b.querySelector('.cw-bf'), k: -1 });
     }
-    mount.appendChild(dots);
-    this.root = root; this.track = track; this.cv = cv; this.ctx = cv.getContext('2d'); this.active = 0; this.scrollX = 0;
+    mount.appendChild(steps);
+    mount.appendChild(root);
+    this.root = root; this.track = track; this.cv = cv; this.ctx = cv.getContext('2d');
     this.panels = [new Panel(0), new Panel(1), new Panel(2)];
     this.T = 0; this.hiddenAt = 0; this.running = false; this.visible = false; this.W = 0; this.H = 0; this.lastFill = -1;
+    this.stage = 0; this.prevStage = -1; this.stageT = 0; this.stageDur = DUR[0]; this.xf = 1;
     this.reduce = !!(reduceMQ && reduceMQ.matches);
+    /* hold the clock until the section has faded in, so the first pulses are not spent while it is still rising */
+    this.revealedAt = 0;
+    var rv = mount.closest ? mount.closest('.reveal') : null;
+    if (!rv || rv.classList.contains('in')) this.revealedAt = -1;
+    else if (window.MutationObserver) {
+      var mo = new MutationObserver(function () {
+        if (!rv.classList.contains('in')) return;
+        mo.disconnect();
+        if (self.revealedAt === 0) { self.revealedAt = performance.now(); self.update(); }
+      });
+      mo.observe(rv, { attributes: true, attributeFilter: ['class'] });
+    } else this.revealedAt = -1;
     this.readColors();
     var self = this;
     this.loop = function (now) { self.frame(now); };
@@ -311,20 +335,21 @@
     } else window.addEventListener('resize', function () { self.onResize(); });
     if (window.IntersectionObserver) {
       new IntersectionObserver(function (es) {
-        var vis = es[es.length - 1].isIntersecting;
+        var en = es[es.length - 1], vis = en.isIntersecting;
         if (vis && !self.visible) self.replay(); else if (!vis && self.visible) self.hiddenAt = performance.now();
+        // phones: the stages only move on while most of the figure is in view
+        self.inView = vis && en.intersectionRatio >= 0.55;
         self.visible = vis; self.update();
-      }, { rootMargin: '0px' }).observe(mount);
+      }, { rootMargin: '0px', threshold: [0, 0.55] }).observe(mount);
     } else this.visible = true;
     document.addEventListener('visibilitychange', function () { self.update(); });
-    var spend = false;
-    root.addEventListener('scroll', function () {
-      if (spend) return; spend = true;
-      requestAnimationFrame(function () { spend = false; self.onScroll(); });
-    }, { passive: true });
     document.addEventListener('site:unlocked', function () { self.readColors(); self.onResize(true); self.update(); });
     if (reduceMQ) {
-      var onRM = function () { self.reduce = reduceMQ.matches; self.reset(); self.render(); self.update(); };
+      var onRM = function () {
+        self.reduce = reduceMQ.matches; self.xf = 1; self.prevStage = -1; self.reset();
+        if (self.single) { self.showHead(self.stage); self.syncSteps(); }
+        self.render(); self.update();
+      };
       if (reduceMQ.addEventListener) reduceMQ.addEventListener('change', onRM); else if (reduceMQ.addListener) reduceMQ.addListener(onRM);
     }
     this.update();
@@ -378,40 +403,74 @@
      restart its loop so the viewer sees the signal re-entrain the tissue within a few seconds */
   Widget.prototype.replay = function () {
     if (this.reduce || !this.hiddenAt || performance.now() - this.hiddenAt < 1500) return;
+    if (this.single) {
+      // phones: away for a while, start the story again from stage 01
+      if (performance.now() - this.hiddenAt > 4000 && (this.stage || this.stageT > 0.5)) this.restart(0);
+      return;
+    }
     if (mod(this.T, RC) < 4.6) return;
     // done on the next frame, not inside the IntersectionObserver callback
     this.restart();
   };
-  Widget.prototype.goTo = function (i) {
-    if (!this.swipe) return;
-    var rc = this.rects[i], left = clamp(rc.x + rc.w / 2 - this.W / 2, 0, this.root.scrollWidth - this.W);
-    try { this.root.scrollTo({ left: left, behavior: this.reduce ? 'auto' : 'smooth' }); } catch (e) { this.root.scrollLeft = left; }
-  };
-  Widget.prototype.onScroll = function () {
-    if (!this.swipe) return;
-    var x = this.root.scrollLeft, mid = x + this.W / 2, best = 0, bd = 1e9;
-    this.scrollX = x;
-    for (var i = 0; i < 3; i++) { var d = Math.abs(this.rects[i].x + this.rects[i].w / 2 - mid); if (d < bd) { bd = d; best = i; } }
-    if (x >= this.root.scrollWidth - this.W - 2) best = 2;
-    if (best !== this.active) {
-      this.active = best; this.setDots();
-      // arriving at stage 03 after it has already settled: replay the signal so the viewer sees it work
-      if (best === 2 && !this.reduce && mod(this.T, RC) >= 4.6) this.restart();
-    }
-    if (!this.running) this.render();
-  };
-  Widget.prototype.setDots = function () {
-    for (var i = 0; i < 3; i++) this.dots[i].classList.toggle('on', i === this.active);
-  };
-  Widget.prototype.restart = function () {
+  Widget.prototype.restart = function (stage) {
     var self = this;
     if (this.replayPending) return;
     this.replayPending = true;
-    requestAnimationFrame(function () { self.replayPending = false; self.T = Math.ceil(self.T / RC) * RC; self.reset(true); self.render(); });
+    requestAnimationFrame(function () {
+      self.replayPending = false;
+      if (self.single) { self.goStage(stage || 0, false, true); return; }
+      self.T = Math.ceil(self.T / RC) * RC; self.reset(true); self.render();
+    });
+  };
+  /* phones: a stage button was pressed */
+  Widget.prototype.pick = function (i) {
+    if (!this.single) return;
+    this.goStage(i, true, false);
+  };
+  /* phones: show stage i. Its panel starts fresh (stage 03 from the first signal wave); a picked stage
+     plays for longer before the cycle moves on. instant skips the fade. */
+  Widget.prototype.goStage = function (i, picked, instant) {
+    var p = this.panels[i];
+    if (i !== this.stage) { this.prevStage = instant || this.reduce ? -1 : this.stage; this.xf = instant || this.reduce ? 1 : 0; }
+    else if (instant) { this.prevStage = -1; this.xf = 1; }
+    this.stage = i; this.stageT = 0; this.stageDur = DUR[i] + (picked ? HOLD : 0);
+    if (!this.reduce) {
+      if (p.mode === 'restore') p.t0 = this.T;
+      p.init(this.T); p.geomValid = false;
+    }
+    // the old name fades with its tissue; the new one comes in with the new tissue
+    this.showHead(this.xf >= 1 ? i : -1);
+    this.syncSteps();
+    if (!this.running) this.render();
+  };
+  Widget.prototype.showHead = function (i) {
+    for (var k = 0; k < 3; k++) this.heads[k].el.classList.toggle('on', k === i);
+  };
+  Widget.prototype.syncSteps = function () {
+    for (var k = 0; k < 3; k++) {
+      var st = this.steps[k], on = k === this.stage;
+      var f = k < this.stage ? 1 : k > this.stage ? 0 : (this.reduce ? 1 : clamp(this.stageT / this.stageDur, 0, 1));
+      f = Math.round(f * 400) / 400;
+      if (f !== st.k) { st.k = f; st.fill.style.transform = 'scaleX(' + f.toFixed(4) + ')'; }
+      if (st.on !== on) { st.on = on; st.el.classList.toggle('on', on); st.el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    }
   };
   Widget.prototype.locked = function () { return document.documentElement.classList.contains('gate-locked'); };
   Widget.prototype.update = function () {
     var want = !this.reduce && this.visible && !document.hidden && !this.locked();
+    if (want && this.revealedAt !== -1) {
+      // the section has not faded in yet (or only just): keep the opening frame and start a beat later
+      var self = this;
+      if (!this.revealedAt) {
+        want = false;
+        // never wait on a reveal that does not come
+        if (!this.revealGuard) this.revealGuard = setTimeout(function () { if (!self.revealedAt) { self.revealedAt = -1; self.update(); } }, 1600);
+      } else {
+        var wait = REVEAL_HOLD - (performance.now() - this.revealedAt);
+        if (wait > 0) { want = false; clearTimeout(this.revealTimer); this.revealTimer = setTimeout(function () { self.update(); }, wait + 16); }
+        else this.revealedAt = -1;
+      }
+    }
     if (want && !this.running) { this.running = true; this.last = performance.now(); requestAnimationFrame(this.loop); }
     else if (!want) this.running = false;
   };
@@ -421,20 +480,18 @@
     this.layout(); this.reset(true); this.render();
   };
   Widget.prototype.layout = function () {
-    var swipe = !!(swipeMQ && swipeMQ.matches);
-    this.swipe = swipe; this.mount.classList.toggle('cw-swipe', swipe);
+    var single = !!(singleMQ && singleMQ.matches), was = this.single;
+    this.single = single; this.mount.classList.toggle('cw-single', single);
     var W = Math.max(1, this.root.clientWidth), H = Math.max(1, this.root.clientHeight);
     this.W = W; this.H = H;
     var dpr = Math.min(window.devicePixelRatio || 1, 2); this.dpr = dpr;
-    var vertical = !swipe && ((mobileMQ && mobileMQ.matches) || W < 640);
+    var vertical = !single && ((mobileMQ && mobileMQ.matches) || W < 640);
     this.vertical = vertical;
-    var rects = [], i, gap, pad, traceH, CW = W;
-    if (swipe) {
-      // each stage is 82% of the width, so the next one peeks in from the edge
-      gap = 12; pad = 16; traceH = 40;
-      var sw = Math.round(W * 0.82);
-      for (i = 0; i < 3; i++) rects.push({ x: 1 + i * (sw + gap), y: 2, w: sw, h: H - 16 });
-      CW = 2 + 3 * sw + 2 * gap;
+    var rects = [], i, gap, pad, traceH, CW = W, headH = 44;
+    if (single) {
+      // one card the width of the column; the three stages take turns in it
+      gap = 0; pad = 16; traceH = 40; headH = 26;
+      for (i = 0; i < 3; i++) rects.push({ x: 0, y: 0, w: W, h: H });
     } else if (!vertical) {
       gap = clamp(W * 0.028, 20, 40); pad = W < 1000 ? 16 : 22; traceH = clamp(H * 0.13, 40, 56);
       var pw = (W - 2 * gap) / 3;
@@ -444,14 +501,14 @@
       var bh = (H - 2 * gap) / 3;
       for (i = 0; i < 3; i++) rects.push({ x: 0, y: i * (bh + gap), w: W, h: bh });
     }
-    this.CW = CW; this.track.style.width = swipe ? CW + 'px' : '';
+    this.CW = CW;
     this.cv.width = Math.round(CW * dpr); this.cv.height = Math.round(H * dpr);
     this.gap = gap; this.rects = rects; this.gcache = {};
-    var headH = 44, tissueTop = pad + headH + 6;
+    var tissueTop = pad + headH + 6;
     var tissueH = rects[0].h - tissueTop - 14 - traceH - pad;
     var s = clamp(tissueH / 5.9, 20, 34);
     // tight cards on phones use the short names
-    var tight = !vertical && !swipe && rects[0].w < 300;
+    var tight = !vertical && !single && rects[0].w < 300;
     for (i = 0; i < 3; i++) {
       var rc = rects[i], cs = this.cards[i].style;
       cs.left = rc.x + 'px'; cs.top = rc.y + 'px'; cs.width = rc.w + 'px'; cs.height = rc.h + 'px';
@@ -463,15 +520,23 @@
       hs.left = (rc.x + pad) + 'px'; hs.top = (rc.y + pad) + 'px'; hs.width = (rc.w - 2 * pad) + 'px';
       this.heads[i].name.textContent = tight ? SHORT[i] : NAMES[i];
     }
-    if (swipe) { this.scrollX = this.root.scrollLeft; this.setDots(); } else this.scrollX = 0;
+    if (single !== was) {
+      // entering the phone layout starts at stage 01; leaving it gives card 03 back its own loop
+      if (single) { this.stage = 0; this.prevStage = -1; this.xf = 1; this.stageT = 0; this.stageDur = DUR[0]; }
+      this.panels[2].t0 = single && !this.reduce ? this.T : null;
+      for (i = 0; i < 3; i++) this.heads[i].el.classList.remove('on');
+    }
+    if (single) { this.showHead(this.xf < 1 && this.prevStage >= 0 && this.xf < XF_OUT / (XF_OUT + XF_IN) ? -1 : this.stage); this.syncSteps(); }
   };
   Widget.prototype.reset = function (keepTime) {
     if (!keepTime) this.T = 0;
     if (this.reduce) this.T = STILL;
+    var pr = this.panels[2];
+    pr.t0 = this.single && !this.reduce ? (pr.t0 != null && this.stage === 2 && pr.t0 <= this.T ? pr.t0 : this.T) : null;
     for (var i = 0; i < 3; i++) {
       var p = this.panels[i];
       if (p.mode === 'restore') {
-        var Tc = this.T - mod(this.T, RC);
+        var Tc = p.t0 != null ? p.t0 : this.T - mod(this.T, RC);
         p.init(Tc);
         for (var t = Tc + 1 / 60; t <= this.T + 1e-6; t += 1 / 60) p.step(t, 1 / 60);
       } else p.init(this.T);
@@ -481,8 +546,27 @@
   Widget.prototype.frame = function (now) {
     if (!this.running) return;
     var dt = clamp((now - this.last) / 1000, 0, 0.05); this.last = now;
-    var n = Math.max(1, Math.ceil(dt * 60 - 1e-6)), h = dt / n;
-    for (var s = 0; s < n; s++) { this.T += h; for (var i = 0; i < 3; i++) this.panels[i].step(this.T, h); }
+    var n = Math.max(1, Math.ceil(dt * 60 - 1e-6)), h = dt / n, s, i;
+    if (this.single) {
+      // only the stage on show (and the one fading out) is simulated
+      var outgoing = this.xf < 1 ? this.prevStage : -1;
+      for (s = 0; s < n; s++) {
+        this.T += h; this.panels[this.stage].step(this.T, h);
+        if (outgoing >= 0) this.panels[outgoing].step(this.T, h);
+      }
+      if (this.xf < 1) {
+        var a = XF_OUT / (XF_OUT + XF_IN), was = this.xf;
+        this.xf = Math.min(1, this.xf + dt / (XF_OUT + XF_IN));
+        if (was < a && this.xf >= a) this.showHead(this.stage);
+        if (this.xf >= 1) this.prevStage = -1;
+      } else if (this.inView !== false) {
+        this.stageT += dt;
+        if (this.stageT >= this.stageDur) this.goStage((this.stage + 1) % 3, false, false);
+      }
+      this.syncSteps();
+    } else {
+      for (s = 0; s < n; s++) { this.T += h; for (i = 0; i < 3; i++) this.panels[i].step(this.T, h); }
+    }
     this.render();
     requestAnimationFrame(this.loop);
   };
@@ -492,23 +576,29 @@
     var ctx = this.ctx, dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.CW, this.H);
-    var cyc = mod(this.T, RC), lo = this.scrollX - this.W * 0.5, hi = this.scrollX + this.W * 1.5;
-    for (var i = 0; i < 3; i++) {
-      var p = this.panels[i], rc = this.rects[i];
-      // swipe layout: a stage well outside the scroller's view is not drawn
-      if (this.swipe && (rc.x > hi || rc.x + rc.w < lo)) continue;
-      this.drawTissue(p, cyc);
-      this.drawTrace(p);
+    if (this.single) {
+      // fade the outgoing stage out, then the new one in
+      var a = XF_OUT / (XF_OUT + XF_IN), x = this.xf, show = this.stage, al = 1;
+      if (x < 1 && this.prevStage >= 0) {
+        if (x < a) { show = this.prevStage; al = 1 - x / a; } else al = (x - a) / (1 - a);
+        al = al * al * (3 - 2 * al);
+      }
+      ctx.globalAlpha = al;
+      this.drawTissue(this.panels[show]);
+      this.drawTrace(this.panels[show]);
+      ctx.globalAlpha = 1;
+    } else {
+      for (var i = 0; i < 3; i++) { this.drawTissue(this.panels[i]); this.drawTrace(this.panels[i]); }
+      this.drawArrows();
     }
-    if (!this.swipe) this.drawArrows();
     // card 03 rule: how much of the tissue is back in step
     var pr = this.panels[2], mc = 0;
     for (var k = 0; k < pr.cells.length; k++) mc += pr.cells[k].c;
     mc = Math.round(mc / pr.cells.length * 200) / 200;
     if (mc !== this.lastFill) { this.lastFill = mc; this.heads[2].fill.style.transform = 'scaleX(' + mc.toFixed(3) + ')'; }
   };
-  Widget.prototype.drawTissue = function (p, cyc) {
-    var ctx = this.ctx, T = this.T, cells = p.cells, s = p.s, i;
+  Widget.prototype.drawTissue = function (p) {
+    var ctx = this.ctx, T = this.T, cells = p.cells, s = p.s, i, cyc = p.cycAt(T);
     var AM = this.AM;
     p.geometry(T);
     // soft warm wash behind the tissue when it pulses together (normal compositing)

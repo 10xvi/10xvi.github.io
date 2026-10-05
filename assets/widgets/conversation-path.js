@@ -530,8 +530,12 @@
       if (!tag) return;
       var amp = p.lane === 0 ? SIG_AMP[p.k] : 9, pw = tag.pw, ph = tag.ph;
       var x, y;
-      if (st.tagInside) { x = st.ctr.x; y = o.y; }
-      else { var dd = amp + 9 + ph / 2; x = o.x - o.nx * dd; y = o.y - o.ny * dd; } // inside the lens, between the two lanes
+      if (st.tagInside) {
+        // stacked layout: the pill rides level with its own packet, on the inside of the lens,
+        // so the word stays tied to its lane (outbound on the right, response on the left)
+        var side = o.x < st.ctr.x ? 1 : -1;
+        x = o.x + side * (amp + 10 + pw / 2); y = o.y;
+      } else { var dd = amp + 9 + ph / 2; x = o.x - o.nx * dd; y = o.y - o.ny * dd; } // inside the lens, between the two lanes
       x = clamp(x, pw / 2 + 4, h.w - pw / 2 - 4);
       blitAt(h, ctx, tag.sp, x, y, a);
     },
@@ -654,6 +658,10 @@
     { t: 'Wellness centers', short: 'Wellness', ring: 2, ang: 128 }
   ];
   var PERIOD = 7.4;
+  /* emphasis per group (0 the home, 1 the two rooms, 2 the wider settings) for each stage of the text */
+  var STAGE_EM = [[1, 0.5, 0.35], [0.7, 1, 0.35], [0.6, 0.6, 1]];
+  var STAGE_INK = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  var EM_DUR = 0.4; // --dur-3
 
   function inBoxes(boxes, x, y) {
     for (var i = 0; i < boxes.length; i++) {
@@ -685,12 +693,38 @@
       var st = h.st;
       st.t = 0.2; st.lit = PATH_NODES.map(function () { return 0; }); st.ringLit = [0, 0, 0]; st.home = 0.4;
       st.returns = []; st.cycle = -1; st.fired = {};
+      st.stage = st.stage || 0; st.emT = 1;
+      st.em = STAGE_EM[st.stage].slice(); st.ink = STAGE_INK[st.stage].slice();
+    },
+    // the reader moved to another stage of the text: ease the emphasis over and send one soft pulse
+    setStage: function (h, k) {
+      var st = h.st;
+      if (k === st.stage) return;
+      st.stage = k;
+      st.emFrom = st.em.slice(); st.inkFrom = st.ink.slice(); st.emT = 0;
+      if (reduced() || locked() || doc.hidden || !h.visible || !h.w) {
+        st.em = STAGE_EM[k].slice(); st.ink = STAGE_INK[k].slice(); st.emT = 1;
+        if (reduced() && st.nodes) this.still(h);
+        h.render();
+        return;
+      }
+      if (k === 0) st.home = 1;
+      for (var i = 0; i < st.nodes.length; i++) if (st.nodes[i].ring === k) st.lit[i] = 1;
+      if (k) st.ringLit[k] = 1;
+      kick();
+    },
+    // emphasis of the figure at a distance r from the centre
+    zoneEm: function (st, r) {
+      var e = st.em;
+      return r <= st.r1 ? lerp(e[0], e[1], smooth(st.rh, st.r1, r)) : lerp(e[1], e[2], smooth(st.r1, st.r2, r));
     },
     layout: function (h) {
       var st = h.st, W = h.w, H = h.h, S = Math.min(W, H), cx = W / 2, cy = H / 2;
       st.cx = cx; st.cy = cy; st.S = S;
       st.fs = S < 430 ? 11 : 12;
-      st.ls = st.fs * 0.12;
+      // narrow figures: the outer labels sit at the corners, reading outward, a little tighter
+      st.narrow = S < 480;
+      st.ls = st.fs * (st.narrow ? 0.08 : 0.12);
       st.lh = st.fs + 4;
       st.rh = clamp(S * 0.11, 42, 54);
       st.r1 = S * 0.245;
@@ -707,27 +741,52 @@
         var x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
         var lines = [nd.t.toUpperCase()];
         var tw = spacedWidth(ctx, lines[0], st.ls);
-        // on narrow figures, wrap a long label onto two lines instead of shrinking it
-        if (tw > S * 0.34 && lines[0].indexOf(' ') > 0) {
-          lines = lines[0].split(' ');
-          tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
-        }
         var nr = nd.ring === 1 ? 6 : 5;
-        var below = nd.ring === 1 || Math.sin(a) > 0;
-        var gapY = nr + 13, bh = st.lh * (lines.length - 1);
-        // ly = baseline of the first line
-        var ly = below ? y + gapY + st.fs * 0.72 : y - gapY - bh;
-        var lx = clamp(x, tw / 2 + pad, W - tw / 2 - pad);
-        var box = [lx - tw / 2 - 7, ly - st.fs * 0.78 - 5, lx + tw / 2 + 7, ly + bh + st.fs * 0.22 + 5];
+        var lx, ly, box, align = 'center', bh;
+        if (st.narrow && nd.ring === 2) {
+          // corner label: anchored on the diagonal 10px past the node, clear of the tick band,
+          // left-aligned on the right side and right-aligned on the left side
+          var right = Math.cos(a) > 0, up = Math.sin(a) < 0;
+          var ax = x + Math.cos(a) * (nr + 10), ay = y + Math.sin(a) * (nr + 10);
+          var avail = right ? W - pad - ax : ax - pad;
+          if (tw > avail && lines[0].indexOf(' ') > 0) {
+            lines = lines[0].split(' ');
+            tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
+          }
+          bh = st.lh * (lines.length - 1);
+          var x0 = clamp(right ? ax : ax - tw, pad, W - pad - tw);
+          align = right ? 'left' : 'right';
+          lx = right ? x0 : x0 + tw;
+          // ly = baseline of the first line; upper labels rest on the anchor, lower ones hang from it
+          ly = up ? ay - bh - st.fs * 0.22 : ay + st.fs * 0.78;
+          box = [x0 - 5, ly - st.fs * 0.78 - 4, x0 + tw + 5, ly + bh + st.fs * 0.22 + 4];
+        } else {
+          // on narrow figures, wrap a long label onto two lines instead of shrinking it
+          if (tw > S * 0.34 && lines[0].indexOf(' ') > 0) {
+            lines = lines[0].split(' ');
+            tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
+          }
+          var below = nd.ring === 1 || Math.sin(a) > 0;
+          var gapY = nr + 13;
+          bh = st.lh * (lines.length - 1);
+          ly = below ? y + gapY + st.fs * 0.72 : y - gapY - bh;
+          lx = clamp(x, tw / 2 + pad, W - tw / 2 - pad);
+          box = [lx - tw / 2 - 7, ly - st.fs * 0.78 - 5, lx + tw / 2 + 7, ly + bh + st.fs * 0.22 + 5];
+        }
         st.boxes.push(box);
-        return { x: x, y: y, r: r, a: a, nr: nr, ring: nd.ring, lines: lines, lx: lx, ly: ly };
+        return { x: x, y: y, r: r, a: a, nr: nr, ring: nd.ring, lines: lines, lx: lx, ly: ly, align: align };
       });
       // keep line work out from under the home label too
       st.homeBox = [cx - st.rh, cy - st.rh, cx + st.rh, cy + st.rh];
     },
     still: function (h) {
       var st = h.st;
-      st.t = 2.15; st.lit = [0.85, 0.85, 0.3, 0.3, 0.3, 0.3]; st.ringLit = [0.5, 0.7, 0.2]; st.home = 0.8; st.returns = [];
+      // a still frame of the stage being read: its group lit, the rest at rest
+      var k = st.stage || 0;
+      st.t = 2.15; st.returns = [];
+      st.lit = PATH_NODES.map(function (nd) { return nd.ring === k ? 0.85 : 0.3; });
+      st.ringLit = [0.5, k === 1 ? 0.7 : 0.2, k === 2 ? 0.6 : 0.2]; st.home = k === 0 ? 0.8 : 0.4;
+      st.em = STAGE_EM[k].slice(); st.ink = STAGE_INK[k].slice(); st.emT = 1;
       st.stillFront = true;
     },
     front: function (st, tc) {
@@ -746,6 +805,11 @@
       var st = h.st;
       st.stillFront = false;
       st.t += dt;
+      if (st.emT < 1) {
+        st.emT = Math.min(1, st.emT + dt / EM_DUR);
+        var ee = easeInOut(st.emT), tgE = STAGE_EM[st.stage], tgI = STAGE_INK[st.stage];
+        for (var g = 0; g < 3; g++) { st.em[g] = lerp(st.emFrom[g], tgE[g], ee); st.ink[g] = lerp(st.inkFrom[g], tgI[g], ee); }
+      }
       var cyc = Math.floor(st.t / PERIOD), tc = st.t - cyc * PERIOD;
       if (cyc !== st.cycle) { st.cycle = cyc; st.fired = {}; st.home = 1; }
       var rho = this.front(st, tc);
@@ -769,18 +833,16 @@
     bake: function (h) {
       var st = h.st, cx = st.cx, cy = st.cy, sky = COL.sky, orange = COL.orange, i, n, ctx;
       var boxes = st.boxes, self = this;
-      var base = makeLayer(h); ctx = base.ctx;
+      // each group is baked on its own layer so the stage being read can be brought forward:
+      // the wider settings (full size), the two rooms and the home (cropped around the centre)
+      var rr = st.r1 + 26;
+      var baseOuter = makeLayer(h), baseRooms = makeSprite(h, cx - rr, cy - rr, cx + rr, cy + rr);
+      ctx = baseOuter.ctx;
       var g0 = ctx.createRadialGradient(cx, cy, st.rh, cx, cy, st.r2 + 14);
       g0.addColorStop(0, rgba(sky, 0.02)); g0.addColorStop(0.75, rgba(sky, 0.055)); g0.addColorStop(1, rgba(sky, 0.0));
       ctx.fillStyle = g0; ctx.beginPath(); ctx.arc(cx, cy, st.r2 + 14, 0, TAU); ctx.fill();
-      var g1 = ctx.createRadialGradient(cx, cy, st.rh * 0.8, cx, cy, st.r1 + 8);
-      g1.addColorStop(0, rgba(COL.amber, 0.1)); g1.addColorStop(0.85, rgba(COL.amber, 0.05)); g1.addColorStop(1, rgba(COL.amber, 0));
-      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(cx, cy, st.r1 + 8, 0, TAU); ctx.fill();
-      var rings = [st.r1, st.r2];
-      for (i = 0; i < 2; i++) {
-        maskedCircle(ctx, cx, cy, rings[i], boxes);
-        ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
-      }
+      maskedCircle(ctx, cx, cy, st.r2, boxes);
+      ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
       ctx.strokeStyle = rgba(COL.line2, 0.8); ctx.lineWidth = 1; ctx.beginPath();
       for (i = 0; i < 120; i++) {
         var ta = i / 120 * TAU, r0 = st.r2 + 7, r1t = st.r2 + (i % 5 === 0 ? 12 : 10);
@@ -789,20 +851,28 @@
         ctx.moveTo(tx0, ty0); ctx.lineTo(tx1, ty1);
       }
       ctx.stroke();
-      ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.muted, 0.5);
+      ctx = baseRooms.ctx;
+      var g1 = ctx.createRadialGradient(cx, cy, st.rh * 0.8, cx, cy, st.r1 + 8);
+      g1.addColorStop(0, rgba(COL.amber, 0.1)); g1.addColorStop(0.85, rgba(COL.amber, 0.05)); g1.addColorStop(1, rgba(COL.amber, 0));
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(cx, cy, st.r1 + 8, 0, TAU); ctx.fill();
+      maskedCircle(ctx, cx, cy, st.r1, boxes);
+      ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
+      [baseRooms.ctx, baseOuter.ctx].forEach(function (c2) { c2.setLineDash([2, 4]); c2.lineWidth = 1; c2.strokeStyle = rgba(COL.muted, 0.5); });
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
+        ctx = n.ring === 1 ? baseRooms.ctx : baseOuter.ctx;
         ctx.beginPath();
         maskedSegment(ctx, cx + Math.cos(n.a) * (st.rh + 6), cy + Math.sin(n.a) * (st.rh + 6),
           n.x - Math.cos(n.a) * (n.nr + 5), n.y - Math.sin(n.a) * (n.nr + 5), boxes);
         ctx.stroke();
       }
-      ctx.setLineDash([]);
-      st.base = base;
+      baseRooms.ctx.setLineDash([]); baseOuter.ctx.setLineDash([]);
+      st.baseOuter = baseOuter; st.baseRooms = baseRooms;
 
-      var top = makeLayer(h); ctx = top.ctx;
+      var topOuter = makeLayer(h), topRooms = makeSprite(h, cx - rr, cy - rr, cx + rr, cy + rr);
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
+        ctx = n.ring === 1 ? topRooms.ctx : topOuter.ctx;
         var nc = self.nodeCol(n);
         if (n.ring === 1) {
           ctx.beginPath(); ctx.arc(n.x, n.y, n.nr + 5, 0, TAU);
@@ -814,6 +884,8 @@
         noShadow(ctx);
         ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
       }
+      st.topOuter = topOuter; st.topRooms = topRooms;
+      var hr = st.rh + 34, home = makeSprite(h, cx - hr, cy - hr, cx + hr, cy + hr); ctx = home.ctx;
       ctx.beginPath(); ctx.arc(cx, cy, st.rh, 0, TAU);
       softShadow(ctx, 18, 6, 0.12);
       ctx.fillStyle = '#fff'; ctx.fill();
@@ -830,7 +902,7 @@
       ctx.font = '600 ' + st.homeFs + 'px ' + DISP; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = rgba(COL.head, 1);
       ctx.fillText('The Home', cx, cy + st.homeFs * 0.42);
-      st.top = top;
+      st.homeLayer = home;
 
       // each label baked twice, slate and ink; lit labels cross-fade by alpha, never by channel mixing
       st.labelSprites = st.nodes.map(function (nd, k) {
@@ -839,7 +911,7 @@
           var sp = makeSprite(h, b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2), c2 = sp.ctx;
           c2.font = '500 ' + st.fs + 'px ' + MONO; c2.textBaseline = 'alphabetic';
           c2.fillStyle = rgba(col, 1);
-          for (var li = 0; li < nd.lines.length; li++) fillSpaced(c2, nd.lines[li], nd.lx, nd.ly + li * st.lh, st.ls, 'center');
+          for (var li = 0; li < nd.lines.length; li++) fillSpaced(c2, nd.lines[li], nd.lx, nd.ly + li * st.lh, st.ls, nd.align);
           out.push(sp);
         });
         return out;
@@ -847,14 +919,16 @@
     },
     draw: function (h, ctx) {
       var st = h.st, cx = st.cx, cy = st.cy, orange = COL.orange, i, n;
-      if (!st.base) this.bake(h);
+      if (!st.baseOuter) this.bake(h);
+      var em = st.em;
       var tc = st.stillFront ? 2.15 : st.t - Math.floor(st.t / PERIOD) * PERIOD;
       var rho = this.front(st, tc);
 
-      blitLayer(h, ctx, st.base);
+      blitLayer(h, ctx, st.baseOuter, em[2]);
+      blitLayer(h, ctx, st.baseRooms, em[1]);
 
-      // trailing band of the propagating pulse
-      var fa = smooth(st.rh, st.rh + 20, rho) * (1 - smooth(st.r2 + 6, st.rEdge, rho));
+      // trailing band of the propagating pulse (quieter where the figure is held back)
+      var fa = smooth(st.rh, st.rh + 20, rho) * (1 - smooth(st.r2 + 6, st.rEdge, rho)) * this.zoneEm(st, rho);
       var fc = this.tint(st, rho);
       if (fa > 0.01) {
         var inner = Math.max(st.rh, rho - st.S * 0.12);
@@ -866,7 +940,7 @@
       // lit rings
       var rings = [st.r1, st.r2];
       for (i = 0; i < 2; i++) {
-        var rl = st.ringLit[i + 1];
+        var rl = st.ringLit[i + 1] * em[i + 1];
         if (rl > 0.01) {
           maskedCircle(ctx, cx, cy, rings[i], st.boxes);
           ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(this.tint(st, rings[i]), 0.7 * rl); ctx.stroke();
@@ -884,7 +958,7 @@
             if (hd > tl) {
               var gx0 = cx + Math.cos(n.a) * tl, gy0 = cy + Math.sin(n.a) * tl, gx1 = cx + Math.cos(n.a) * hd, gy1 = cy + Math.sin(n.a) * hd;
               var sg = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
-              sg.addColorStop(0, rgba(fc, 0)); sg.addColorStop(1, rgba(fc, 0.95 * (1 - smooth(d1, d1 + 30, rho))));
+              sg.addColorStop(0, rgba(fc, 0)); sg.addColorStop(1, rgba(fc, 0.95 * (1 - smooth(d1, d1 + 30, rho)) * this.zoneEm(st, hd)));
               ctx.strokeStyle = sg;
               ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx1, gy1); ctx.stroke();
             }
@@ -902,7 +976,7 @@
         n = st.nodes[rt.i];
         var e = easeInOut(u), dist = lerp(n.r - n.nr - 6, st.rh + 6, e);
         var px = cx + Math.cos(n.a) * dist, py = cy + Math.sin(n.a) * dist;
-        var ra = Math.sin(Math.PI * u), rc = this.tint(st, dist);
+        var ra = Math.sin(Math.PI * u) * this.zoneEm(st, dist), rc = this.tint(st, dist);
         glowDot(ctx, px, py, 9, rc, 0.22 * ra);
         ctx.globalAlpha = ra;
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px, py, 2.6, 0, TAU); ctx.fill();
@@ -913,21 +987,24 @@
       // glows sit under the baked discs
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        if (st.lit[i] > 0.01) glowDot(ctx, n.x, n.y, n.nr + 16, this.nodeCol(n), 0.24 * st.lit[i]);
+        if (st.lit[i] > 0.01) glowDot(ctx, n.x, n.y, n.nr + 16, this.nodeCol(n), 0.24 * st.lit[i] * em[n.ring]);
       }
       var hm = st.home;
-      glowDot(ctx, cx, cy, st.rh * 1.75, orange, 0.1 + 0.12 * hm);
+      glowDot(ctx, cx, cy, st.rh * 1.75, orange, (0.1 + 0.12 * hm) * em[0]);
       if (hm > 0.01) {
         ctx.beginPath(); ctx.arc(cx, cy, st.rh + 7 + 8 * easeOut(1 - hm), 0, TAU);
-        ctx.lineWidth = 1.25; ctx.strokeStyle = rgba(orange, 0.45 * hm); ctx.stroke();
+        ctx.lineWidth = 1.25; ctx.strokeStyle = rgba(orange, 0.45 * hm * em[0]); ctx.stroke();
       }
 
-      blitLayer(h, ctx, st.top);
+      blitLayer(h, ctx, st.topOuter, em[2]);
+      blitLayer(h, ctx, st.topRooms, em[1]);
+      blitLayer(h, ctx, st.homeLayer, em[0]);
 
       // lit discs and labels
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        var lit = st.lit[i], nc = this.nodeCol(n);
+        var lit = st.lit[i], nc = this.nodeCol(n), ge = em[n.ring];
+        ctx.globalAlpha = ge;
         if (lit > 0.01) {
           if (n.ring === 1) {
             ctx.beginPath(); ctx.arc(n.x, n.y, n.nr + 5, 0, TAU);
@@ -937,12 +1014,53 @@
           ctx.fillStyle = rgba(mix(COL.white, nc, 0.12 + 0.88 * lit), 1); ctx.fill();
           ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
         }
-        var k = smooth(0.22, 0.68, lit), sp = st.labelSprites[i];
-        if (k < 0.995) blitLayer(h, ctx, sp[0], 1 - k);
-        if (k > 0.005) blitLayer(h, ctx, sp[1], k);
+        ctx.globalAlpha = 1;
+        // the active stage's labels hold their ink colour; the rest light up as the pulse passes
+        // (held-back labels keep a readable floor)
+        var k = Math.max(smooth(0.22, 0.68, lit), st.ink[n.ring]), sp = st.labelSprites[i], la = 0.3 + 0.7 * ge;
+        if (k < 0.995) blitLayer(h, ctx, sp[0], (1 - k) * la);
+        if (k > 0.005) blitLayer(h, ctx, sp[1], k * la);
       }
     }
   };
+
+  /* ---------- the path follows the three stages of the text beside (or below) it ---------- */
+  function bindStages(h) {
+    var wrap = h.mount.closest ? h.mount.closest('.path') : null;
+    var items = wrap ? wrap.querySelectorAll('.stages li') : [];
+    if (items.length < 2) return;
+    wrap.classList.add('cpw-staged');
+    // phones and portrait tablets pin the figure under the nav (see conversation-path.css), so the
+    // reading line sits below the pinned figure instead of in the middle of the screen
+    var pinMq = window.matchMedia ? window.matchMedia('(max-width: 960px) and (min-height: 600px)') : null;
+    var near = true, queued = 0, cur = -1;
+    function measure() {
+      queued = 0;
+      var vh = window.innerHeight || root.clientHeight, line = vh * 0.42;
+      if (pinMq && pinMq.matches) {
+        var fb = h.mount.getBoundingClientRect().bottom;
+        line = Math.min(vh * 0.85, Math.max(line, fb + Math.max(40, (vh - fb) * 0.3)));
+      }
+      var k = 0;
+      for (var i = 1; i < items.length && i < 3; i++) if (items[i].getBoundingClientRect().top <= line) k = i;
+      if (k !== cur) {
+        cur = k;
+        for (i = 0; i < items.length; i++) items[i].classList.toggle('is-active', i === k);
+      }
+      Path.setStage(h, k);
+    }
+    function queue() { if (near && !queued) queued = requestAnimationFrame(measure); }
+    if ('IntersectionObserver' in window) {
+      near = false;
+      new IntersectionObserver(function (es) {
+        near = es[es.length - 1].isIntersecting;
+        if (near) queue();
+      }, { rootMargin: '25% 0px' }).observe(wrap);
+    }
+    window.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    measure();
+  }
 
   /* ---------- boot ---------- */
   function setup() {
@@ -955,6 +1073,7 @@
       var h = new Host(f[0], f[1]); f[0].__cpw = h;
       f[0].classList.add(f[1] === Conversation ? 'cpw-conv' : 'cpw-path');
       widgets.push(h);
+      if (f[1] === Path) bindStages(h);
     });
     if (!widgets.length) return;
 

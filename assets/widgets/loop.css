@@ -37,8 +37,9 @@
   font-size: 11px;
   font-weight: 500;
   letter-spacing: .14em;
+  margin-right: -.14em;               /* trailing tracking out of the box, so the number centres optically */
   color: var(--muted, #64748b);
-  transition: color .45s ease;
+  transition: color var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
 }
 [data-widget="loop"] .lp-name {
   font-family: var(--display, "Space Grotesk", system-ui, sans-serif);
@@ -47,14 +48,17 @@
   letter-spacing: -.01em;
   line-height: 1.15;
   color: var(--text, #475569);
-  transition: color .45s ease;
+  transition: color var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
 }
 [data-widget="loop"] .lp-label.is-active .lp-num { color: var(--lp-ink, var(--orange-ink, #c2410c)); }
 [data-widget="loop"] .lp-label.is-active .lp-name { color: var(--head, #0f172a); }
 
 /* phones: numbers only, the list beside carries the names */
-[data-widget="loop"].lp-compact .lp-name { display: none; }
-[data-widget="loop"].lp-compact .lp-num { font-size: 12px; letter-spacing: .1em; }
+[data-widget="loop"].lp-compact .lp-name,
+[data-widget="loop"].lp-inner .lp-name { display: none; }
+[data-widget="loop"].lp-compact .lp-num { font-size: 12px; }
+/* numbers inside the track (the short pinned ring): a touch smaller so they sit clear of the model well */
+[data-widget="loop"].lp-inner .lp-num { font-size: 11px; }
 
 [data-widget="loop"] .lp-core {
   position: absolute;
@@ -65,11 +69,11 @@
   font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
-  letter-spacing: .16em;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--muted, #64748b);
 }
-[data-widget="loop"] .lp-core span { white-space: nowrap; }
+[data-widget="loop"] .lp-core span { white-space: nowrap; margin-right: -.14em; }
 [data-widget="loop"].lp-bare .lp-core { display: none; }
 [data-widget="loop"].lp-pointing { cursor: default; }
 
@@ -81,15 +85,19 @@
 #loop-steps li[data-step="4"] .num { color: var(--lp-ink, var(--sky-ink, #0369a1)); }
 #loop-steps li[data-step="5"] .num { color: var(--lp-ink, var(--indigo-ink, #4338ca)); }
 #loop-steps li[data-step="6"] .num { color: var(--lp-ink, var(--blue-ink, #1d4ed8)); }
+/* one state timing for the whole step change (number, title, card, bar), in step with the ring's labels;
+   the background sweep is the one longer gesture */
 #loop-steps li .num,
-#loop-steps li h3 { transition: color .45s ease; }
+#loop-steps li h3 { transition: color var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)); }
 #loop-steps li {
   background-color: rgba(255, 255, 255, 0);
   background-image: linear-gradient(90deg, var(--lp-soft, rgba(249, 115, 22, .07)), var(--lp-soft-0, rgba(249, 115, 22, 0)) 75%);
   background-repeat: no-repeat;
   background-size: 0% 100%;
   box-shadow: 0 0 0 1px rgba(226, 232, 240, 0), 0 8px 24px -14px rgba(15, 23, 42, 0);
-  transition: background-size .6s cubic-bezier(.2, .7, .2, 1), background-color .4s ease, box-shadow .4s ease;
+  transition: background-size .6s var(--ease-out, cubic-bezier(.2, .7, .2, 1)),
+    background-color var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)),
+    box-shadow var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
 }
 #loop-steps li::before {
   content: "";
@@ -102,7 +110,7 @@
   background: var(--lp-c, var(--orange, #f97316));
   transform: scaleY(0);
   transform-origin: 50% 0;
-  transition: transform .5s cubic-bezier(.2, .7, .2, 1);
+  transition: transform var(--dur-3, 400ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
   pointer-events: none;
 }
 #loop-steps li.is-active {
@@ -115,14 +123,14 @@
 
 /* phones and portrait tablets: the ring pins under the nav while the steps scroll beneath it, and the
    step nearest the ring lights up (the script drives this from scroll position under the same query).
-   An opaque band in the section tint, full bleed, keeps the passing steps from showing through. */
+   An opaque band in the section tint, full bleed, hides the passing steps; only a short feather shows. */
 @media (max-width: 960px) and (min-height: 600px) {
   .loop > .widget[data-widget="loop"] {
     position: sticky;
-    top: 76px;
+    top: var(--sticky-top, 76px);   /* follows the nav if it slides away while reading */
     z-index: 1;
-    width: clamp(220px, min(62vw, 40vh), 340px);
-    width: clamp(220px, min(62vw, 40svh), 340px);   /* svh: no resize while a phone's toolbar slides */
+    width: clamp(220px, min(62vw, 30vh), 320px);
+    width: clamp(220px, min(62vw, 30svh), 320px);   /* svh: no resize while a phone's toolbar slides */
     /* the pin releases 150px early, so the ring leaves together with Learn instead of covering it;
        the list's matching negative margin keeps the layout exactly where it was */
     margin-bottom: 150px;
@@ -135,11 +143,40 @@
     width: 100vw;
     margin-left: -50vw;
     top: -16px;
-    bottom: -30px;
+    bottom: -18px;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(to bottom, var(--bg-alt, #f8fafc) 0, var(--bg-alt, #f8fafc) calc(100% - 22px), rgba(248, 250, 252, 0) 100%);
+    background: linear-gradient(to bottom, var(--bg-alt, #f8fafc) 0, var(--bg-alt, #f8fafc) calc(100% - 16px), rgba(248, 250, 252, 0) 100%);
   }
+}
+/* the pinned ring glides with the nav when it slides away (--sticky-top); the page's reveal fade is
+   repeated here so this rule does not cancel it */
+@media (max-width: 960px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  .js .loop > .widget.reveal.in:not(.skip-reveal)[data-widget="loop"],
+  .loop > .widget:not(.reveal)[data-widget="loop"] {
+    transition: top .3s var(--ease-out, cubic-bezier(.2, .7, .2, 1)),
+      opacity var(--dur-4, 700ms) var(--ease-out, cubic-bezier(.2, .7, .2, 1)),
+      transform calc(var(--dur-4, 700ms) + 120ms) var(--ease-out, cubic-bezier(.2, .7, .2, 1));
+  }
+}
+/* phones: a short, full-width dial (numbers inside the track) so the pinned block stays near 30% of the
+   screen and the steps keep the full column */
+@media (max-width: 560px) and (min-height: 600px) {
+  .loop > .widget[data-widget="loop"] {
+    width: 100%;
+    max-width: none;
+    aspect-ratio: auto;
+    height: clamp(150px, 20vh, 184px);
+    height: clamp(150px, 20svh, 184px);
+    padding-bottom: 0;
+  }
+}
+/* phones: the step number becomes a small kicker above the title, so the text gets the full measure */
+@media (max-width: 560px) {
+  #loop-steps li { grid-template-columns: 1fr; row-gap: 2px; padding: 12px 14px 14px 18px; }
+  #loop-steps li .num { padding-top: 0; }
+  #loop-steps li p { grid-column: 1; }
+  #loop-steps li::before { top: 14px; bottom: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

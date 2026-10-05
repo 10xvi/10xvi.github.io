@@ -45,30 +45,61 @@
     COL.sky = v('--sky', [14, 165, 233]);
     COL.skyDeep = v('--sky-deep', [2, 132, 199]);
     COL.red = v('--red', [239, 68, 68]);
-    /* body signals are warm: the vitality range from orange to amber */
+    /* body signals stay warm, but each pair is a visible step apart:
+       heart = orange, breathing = amber, sleep = deep orange, temperature = pale orange */
     KINDS[0].rgb = COL.orange;
     KINDS[1].rgb = COL.amber;
-    KINDS[2].rgb = mix(COL.orange, [194, 65, 12], 0.55);
-    KINDS[3].rgb = mix(COL.amber, COL.orange, 0.5);
+    KINDS[2].rgb = mix(COL.orange, v('--orange-ink', [194, 65, 12]), 0.8);
+    KINDS[3].rgb = mix(COL.orange, [255, 255, 255], 0.22);
   }
 
-  /* ---------- shared signal kinds (from the page copy) ---------- */
+  /* ---------- shared signal kinds (from the page copy) ----------
+     Orange always means "body signal"; the waveform carries the type. The legend glyph and the
+     packets on the spokes are drawn from the same samples, at the same length-to-height ratio. */
   var KINDS = [
-    { name: 'Heart rhythm', rgb: [249, 115, 22] },
-    { name: 'Breathing',    rgb: [245, 158, 11] },
-    { name: 'Sleep',        rgb: [221, 90, 17] },
-    { name: 'Temperature',  rgb: [247, 136, 16] }
+    { name: 'Heart rhythm', rgb: [249, 115, 22], a: 1 },
+    { name: 'Breathing',    rgb: [245, 158, 11], a: 1 },
+    { name: 'Sleep',        rgb: [207, 78, 15],  a: 1 },
+    { name: 'Temperature',  rgb: [250, 147, 79], a: 0.7 }
   ];
   function gauss(x, m, s) { var d = (x - m) / s; return Math.exp(-0.5 * d * d); }
-  /* wave(kind, u) with u in [0,1] along a packet; returns displacement in [-1, 1] */
+  function tri(x, c, hw) { var d = Math.abs(x - c) / hw; return d < 1 ? 1 - d : 0; }
+  /* wave(kind, u) with u in [0,1] along a packet; displacement, roughly [-1, 1] */
   function wave(k, u) {
-    if (k === 0) { /* heart rhythm: P, QRS, T */
-      return 0.18 * gauss(u, 0.24, 0.045) + 1.0 * gauss(u, 0.5, 0.018) - 0.42 * gauss(u, 0.545, 0.02) + 0.3 * gauss(u, 0.74, 0.06);
+    if (k === 0) { /* heart rhythm: a flat line, a small P, the sharp QRS spike, then T */
+      return 0.16 * gauss(u, 0.2, 0.045) - 0.14 * tri(u, 0.43, 0.03) + 1.0 * tri(u, 0.485, 0.045) -
+        0.42 * tri(u, 0.55, 0.035) + 0.26 * gauss(u, 0.75, 0.055);
     }
-    if (k === 1) return 0.62 * Math.sin(TAU * u);                     /* breathing: one slow breath */
-    if (k === 2) return 0.5 * Math.tanh(4 * Math.sin(TAU * 1.5 * u)); /* sleep: stepped stages */
-    return 0.28 * Math.sin(TAU * 0.5 * u + 0.4) + 0.12 * Math.sin(TAU * 2 * u); /* temperature: slow drift */
+    if (k === 1) return 0.78 * Math.sin(TAU * u);                       /* breathing: one wide, slow breath */
+    if (k === 2) return (u < 0.24 || u >= 0.62) ? 0.62 : -0.62;          /* sleep: slow square steps */
+    return 0.08 * (u - 0.5) + 0.72 * gauss(u, 0.56, 0.12) - 0.18;       /* temperature: near flat, one bump */
   }
+  /* each kind's samples, centred on its own mid-line; the hard edges of the spike and the
+     steps are sampled exactly so they stay crisp at any size */
+  var WAVES = (function () {
+    var out = [], extra = [[0.4, 0.43, 0.46, 0.485, 0.51, 0.53, 0.55, 0.585], [], [0.24, 0.62], []];
+    for (var k = 0; k < 4; k++) {
+      var us = [], j;
+      for (j = 0; j <= 28; j++) us.push(j / 28);
+      us = us.concat(extra[k]).sort(function (a, b) { return a - b; });
+      var u = [], y = [], lo = 1e9, hi = -1e9;
+      for (j = 0; j < us.length; j++) {
+        if (j && us[j] - us[j - 1] < 1e-4) continue;
+        if (k === 2 && extra[2].indexOf(us[j]) >= 0) { /* a vertical step: both levels at the same u */
+          u.push(us[j]); y.push(wave(2, us[j] - 1e-4));
+        }
+        var v = wave(k, us[j]);
+        u.push(us[j]); y.push(v);
+        if (v < lo) lo = v; if (v > hi) hi = v;
+      }
+      var mid = (lo + hi) / 2;
+      for (j = 0; j < y.length; j++) y[j] -= mid;
+      out.push({ u: u, y: y, pp: hi - lo });
+    }
+    return out;
+  })();
+  /* one ratio for legend and spokes: packet height (peak to peak units) per unit of length */
+  var WAVE_RATIO = 0.19;
   function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')'; }
 
   /* =====================================================================
@@ -97,13 +128,10 @@
     legend.setAttribute('aria-hidden', 'true');
     KINDS.forEach(function (k, i) {
       var item = el('span', 'ms-wm-key');
-      var pts = [];
-      for (var j = 0; j <= 24; j++) {
-        var u = j / 24;
-        pts.push((1 + u * 20).toFixed(2) + ',' + (6 - wave(i, u) * 4).toFixed(2));
-      }
-      item.innerHTML = '<svg viewBox="0 0 22 12" width="22" height="12"><polyline fill="none" stroke="' + rgba(k.rgb, 1) +
-        '" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" points="' + pts.join(' ') + '"/></svg><span>' + k.name + '</span>';
+      var wv = WAVES[i], pts = [], A = 22 * WAVE_RATIO; /* 22 x 10 glyph, same ratio as the spokes */
+      for (var j = 0; j < wv.u.length; j++) pts.push((wv.u[j] * 22).toFixed(2) + ',' + (5 - wv.y[j] * A).toFixed(2));
+      item.innerHTML = '<svg viewBox="0 0 22 10" width="22" height="10"><polyline fill="none" stroke="' + rgba(k.rgb, 1) +
+        '" stroke-opacity="' + k.a + '" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" points="' + pts.join(' ') + '"/></svg><span>' + k.name + '</span>';
       legend.appendChild(item);
     });
 
@@ -198,7 +226,11 @@
         s: prev ? prev.s : rand(0.08, 0.4),
         f: prev ? prev.f : 0,
         timer: prev ? prev.timer : rand(0.2, 4.5),
-        kinds: [(i) % 4, (i + 1 + (i % 3)) % 4, (i + 2) % 4]
+        /* each person sends one kind of signal for a while (a run of 2 to 3 packets), so a spoke reads
+           as "this person's sleep"; then moves on to the next kind */
+        kind: prev ? prev.kind : (i * 3 + 1) % 4,
+        run: prev ? prev.run : 1 + (i % 3),
+        land: prev ? prev.land : 1
       });
     }
     this.nodes = nodes;
@@ -300,41 +332,53 @@
 
   WorldModel.prototype.spawnIn = function (ni, progress) {
     var n = this.nodes[ni];
-    var kind = n.kinds[(Math.random() * n.kinds.length) | 0];
+    if (n.run <= 0) { n.kind = (n.kind + 1) % 4; n.run = 2 + ((Math.random() * 2) | 0); }
+    n.run--;
     var dur = n.mine ? rand(4.2, 5) : rand(4.4, 6.2);
-    this.inb.push({ n: ni, k: kind, d: (progress || 0) * n.path.L, v: n.path.L / dur, len: this.small ? 34 : 42 });
+    this.inb.push({ n: ni, k: n.kind, d: (progress || 0) * n.path.L, v: n.path.L / dur, len: this.small ? 26 : 30 });
   };
-  WorldModel.prototype.spawnOut = function (ni, progress, dur) {
-    this.outb.push({ n: ni, t: progress || 0, dur: dur || 2.3 });
+  /* t is in seconds since launch; a negative t is the wait before it leaves the core */
+  WorldModel.prototype.spawnOut = function (ni, t) {
+    this.outb.push({ n: ni, t: t || 0 });
   };
-  /* one learned update, sent to every personal model at once: a sky ring leaves the core,
-     then a comet runs down every channel and lands on every node together */
-  var BC_EVERY = 4.8, BC_DUR = 2.3, BC_DELAY = 0.16;
+  /* one learned update, sent back along the same channels the signals came in on:
+     a short ring starts the wave at the core, then one small sky dot runs down every spoke,
+     farther people a little later, and a fine ring opens where each one lands */
+  var BC_EVERY = 4.8, BC_DUR = 0.9, BC_SPREAD = 0.25, BC_LAND = 0.6;
+  /* 0 for the nearest person, 1 for the farthest: farther people hear back a little later */
+  WorldModel.prototype.reach = function (i) {
+    var lo = 1e9, hi = 0, k, L;
+    for (k = 0; k < this.nodes.length; k++) { L = this.nodes[k].path.L; if (L < lo) lo = L; if (L > hi) hi = L; }
+    return hi - lo > 1 ? (this.nodes[i].path.L - lo) / (hi - lo) : 0;
+  };
   WorldModel.prototype.broadcast = function () {
     this.ring = 0;
     this.energy = Math.min(1.2, this.energy + 0.25);
-    for (var i = 0; i < this.nodes.length; i++) this.spawnOut(i, -BC_DELAY / BC_DUR, BC_DUR);
+    for (var i = 0; i < this.nodes.length; i++) this.spawnOut(i, -this.reach(i) * BC_SPREAD);
   };
+  function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
 
   WorldModel.prototype.seedStatic = function (full) {
     /* a complete, calm frame: signals mid-flight, a learned update on its way back out */
     this.inb = []; this.outb = []; this.ring = -1;
     var N = this.nodes.length, i;
+    for (i = 0; i < N; i++) { this.nodes[i].land = 1; this.nodes[i].f = 0; }
     for (i = 0; i < N; i++) {
       /* inbound traces sit on the outer half of each channel, clear of the returning comets */
       var p = full ? 0.1 + 0.3 * ((i * 0.37) % 1) : ((i * 0.37) % 1) * 0.75 + 0.12;
       this.spawnIn(i, p);
+      var pk = this.inb[this.inb.length - 1];
+      pk.d = Math.min(Math.max(pk.d, pk.len + 8), this.nodes[i].path.L * 0.85); /* whole, never cut by the person's disc */
       if (full) { this.nodes[i].s = 0.55 + 0.45 * ((i * 0.618) % 1); }
     }
     if (full) {
-      for (i = 0; i < N; i++) this.spawnOut(i, 0.36, BC_DUR);
+      /* the update half way down every spoke */
+      for (i = 0; i < N; i++) this.spawnOut(i, BC_DUR * 0.5 - this.reach(i) * BC_SPREAD * 0.5);
       this.nodes[0].s = 1;
       this.learn = 1;
     } else {
-      /* the first update is already leaving the core when the figure comes into view */
-      for (i = 0; i < N; i++) this.spawnOut(i, 0.12, BC_DUR);
-      this.ring = 0.3;
-      this.bcT = BC_EVERY - BC_DUR * 0.12;
+      /* the first update leaves the core just after the figure comes into view */
+      this.bcT = 0.7;
     }
   };
 
@@ -361,13 +405,14 @@
     if (this.ring >= 0) { this.ring += dt / 0.9; if (this.ring >= 1) this.ring = -1; }
     for (i = this.outb.length - 1; i >= 0; i--) {
       var o = this.outb[i];
-      o.t += dt / o.dur;
-      if (o.t >= 1) {
+      o.t += dt;
+      if (o.t >= BC_DUR) {
         var tn = nodes[o.n];
-        tn.s = Math.min(1, tn.s + 0.42); tn.f = 1;
+        tn.s = Math.min(1, tn.s + 0.42); tn.f = 1; tn.land = 0;
         this.outb.splice(i, 1);
       }
     }
+    for (i = 0; i < N; i++) if (nodes[i].land < 1) nodes[i].land = Math.min(1, nodes[i].land + dt / BC_LAND);
     this.energy *= Math.exp(-dt * 1.4);
     for (i = 0; i < this.latFlash.length; i++) this.latFlash[i] = Math.max(0, this.latFlash[i] - dt * 0.8);
   };
@@ -407,50 +452,48 @@
     /* channels + soft shadows (cached) */
     ctx.drawImage(this.layer, 0, 0, w, h);
 
-    /* incoming body data: short traces carrying the shape of each signal.
-       Segments are batched by colour and quantised opacity to keep draw calls low. */
-    var q = [0, 0, 0, 0];
-    var amp = this.small ? 4 : 5;
-    var LV = 7, buckets = this.buckets || (this.buckets = []);
+    /* incoming body data: each packet is the legend's own waveform, drawn at the same ratio of
+       length to height. Packets are batched by kind and quantised opacity to keep draw calls low. */
+    var q = [0, 0, 0, 0], qe = [0, 0, 0, 0];
+    var LV = 6, buckets = this.buckets || (this.buckets = []);
     for (i = 0; i < KINDS.length * LV; i++) { if (buckets[i]) buckets[i].length = 0; else buckets[i] = []; }
     for (i = 0; i < this.inb.length; i++) {
       var p = this.inb[i];
       n = nodes[p.n];
-      var path = n.path;
+      var path = n.path, PL = path.L;
       var head = p.d, tail = p.d - p.len;
-      var fadeIn = clamp(head / 30, 0, 1);
-      var fadeOut = clamp((path.L - tail) / (p.len + 6), 0, 1);
-      fadeOut = fadeOut * fadeOut;
-      var base = (n.mine ? 1 : 0.82) * fadeIn * Math.min(1, fadeOut * 1.4);
-      if (base <= 0.01) continue;
-      var steps = 22, prevX = null, prevY = null;
-      for (j = 0; j <= steps; j++) {
-        var u = j / steps, d = tail + u * p.len;
-        if (d < 0 || d > path.L) { prevX = null; continue; }
-        pathAt(path, d, q);
-        /* the wave settles as it is absorbed into the shared model */
-        var near = clamp((path.L - d) / 40, 0, 1);
-        var off = wave(p.k, u) * amp * (0.35 + 0.65 * near);
-        var x = q[0] + q[2] * off, y = q[1] + q[3] * off;
-        if (prevX !== null) {
-          var env = Math.sin(Math.PI * (u - 0.5 / steps));
-          env = Math.pow(Math.max(0, env), 0.8) * (0.3 + 0.7 * u);
-          var al = base * env;
-          if (al > 0.04) {
-            var lv = Math.min(LV - 1, Math.floor(al * LV));
-            buckets[p.k * LV + lv].push(prevX, prevY, x, y);
-          }
-        }
-        prevX = x; prevY = y;
+      if (head <= 0 || tail >= PL) continue;
+      /* fades in as it leaves the person, slips under the core's rim as it is absorbed */
+      var al0 = (n.mine ? 1 : 0.86) * clamp(head / 18, 0, 1) * clamp((PL + p.len * 0.35 - tail) / (p.len * 0.9), 0, 1);
+      if (al0 <= 0.04) continue;
+      var wv = WAVES[p.k], A = p.len * WAVE_RATIO, pts = [];
+      pathAt(path, PL, qe);
+      for (j = 0; j < wv.u.length; j++) {
+        var d = tail + wv.u[j] * p.len;
+        if (d < 0) continue;
+        if (d > PL) { /* carry on straight into the core (hidden under its disc) */
+          var ex = d - PL;
+          q[0] = qe[0] + qe[3] * ex; q[1] = qe[1] - qe[2] * ex; q[2] = qe[2]; q[3] = qe[3];
+        } else pathAt(path, d, q);
+        var off = wv.y[j] * A;
+        pts.push(q[0] + q[2] * off, q[1] + q[3] * off);
       }
+      if (pts.length < 4) continue;
+      var lv = Math.min(LV - 1, Math.floor(al0 * LV));
+      buckets[p.k * LV + lv].push(pts);
     }
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.75;
     for (i = 0; i < buckets.length; i++) {
       var bk = buckets[i];
       if (!bk.length) continue;
-      ctx.strokeStyle = rgba(KINDS[(i / LV) | 0].rgb, Math.min(1, ((i % LV) + 1) / LV * 1.05));
+      var kd = KINDS[(i / LV) | 0];
+      ctx.strokeStyle = rgba(kd.rgb, kd.a * Math.min(1, ((i % LV) + 1) / LV));
       ctx.beginPath();
-      for (j = 0; j < bk.length; j += 4) { ctx.moveTo(bk[j], bk[j + 1]); ctx.lineTo(bk[j + 2], bk[j + 3]); }
+      for (j = 0; j < bk.length; j++) {
+        var pp = bk[j];
+        ctx.moveTo(pp[0], pp[1]);
+        for (k = 2; k < pp.length; k += 2) ctx.lineTo(pp[k], pp[k + 1]);
+      }
       ctx.stroke();
     }
 
@@ -511,67 +554,46 @@
     ctx.beginPath(); ctx.arc(cx, cy, Rc * 1.36, 0, TAU); ctx.stroke();
     ctx.restore();
 
-    /* the learned update leaving the core: one sky ring, easing outwards */
+    /* the learned update leaving the core: a short sky ring that starts the wave */
     if (this.ring >= 0) {
       var rg = this.ring, re = 1 - (1 - rg) * (1 - rg) * (1 - rg);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = rgba(SKY, 0.55 * (1 - rg));
-      ctx.beginPath(); ctx.arc(cx, cy, Rc * (1.12 + 0.5 * re), 0, TAU); ctx.stroke();
+      ctx.lineWidth = 1.25;
+      ctx.strokeStyle = rgba(SKY, 0.5 * (1 - rg));
+      ctx.beginPath(); ctx.arc(cx, cy, Rc * (1.12 + 0.23 * re), 0, TAU); ctx.stroke();
     }
 
-    /* ...then sky comets run back down every channel to each personal model.
-       Tails are batched by quantised opacity, heads by fade, to keep draw calls low. */
-    var OL = 8, ob = this.obuckets || (this.obuckets = []), heads = this.oheads || (this.oheads = []);
-    for (j = 0; j < OL; j++) { if (ob[j]) ob[j].length = 0; else ob[j] = []; if (heads[j]) heads[j].length = 0; else heads[j] = []; }
-    var tl = this.small ? 38 : 48, segs = 12, hr = this.small ? 3 : 3.5, gr = this.small ? 7 : 8.5;
+    /* ...carried back down the same channels: one small sky dot per spoke, with a short fading trail */
+    var dots = this.odots || (this.odots = []), trails = this.otrails || (this.otrails = []);
+    dots.length = 0; trails.length = 0;
+    var TR = this.small ? 10 : 12;
     for (i = 0; i < this.outb.length; i++) {
       var o = this.outb[i];
       if (o.t <= 0) continue;
       n = nodes[o.n];
-      /* bursts out of the core, then lands with some speed left (no docking beside the node) */
-      var ot = clamp(o.t, 0, 1), it = 1 - ot;
-      var tt = 0.4 * ot + 0.6 * (1 - it * it);
-      var pth = n.path, hd = pth.L * (1 - tt);
-      var fade = Math.min(1, ot * 7) * Math.min(1, it * 9);
-      if (fade <= 0.02) continue;
-      var px0 = null, py0 = null;
-      for (j = 0; j <= segs; j++) {
-        var uu = j / segs, dd = hd + uu * tl;
-        if (dd > pth.L) break;
-        pathAt(pth, dd, q);
-        if (px0 !== null) {
-          var oa = fade * (1 - uu + 0.5 / segs);
-          if (oa > 0.03) ob[Math.min(OL - 1, Math.floor(oa * OL))].push(px0, py0, q[0], q[1]);
-        }
-        px0 = q[0]; py0 = q[1];
-      }
+      /* it runs on into the person's own disc (drawn on top), so it never parks beside it */
+      var pth = n.path, ue = easeInOutCubic(clamp(o.t / BC_DUR, 0, 1)), ext = n.r + 3 + (n.mine ? 2 : 0);
+      var hd = pth.L - (pth.L + ext) * ue;
       pathAt(pth, hd, q);
-      heads[Math.min(OL - 1, Math.floor(fade * OL))].push(q[0], q[1]);
+      if (hd < 0) { q[0] += q[3] * hd; q[1] -= q[2] * hd; }
+      dots.push(q[0], q[1]);
+      /* the trail follows the dot into the person's disc rather than lingering beside it */
+      var tEnd = Math.min(hd + TR, pth.L), tStart = Math.max(0, hd);
+      if (tEnd - tStart > 1.5) {
+        var x0 = q[0], y0 = q[1];
+        if (hd < 0) { pathAt(pth, 0, q); x0 = q[0]; y0 = q[1]; }
+        pathAt(pth, tEnd, q); trails.push(x0, y0, q[0], q[1]);
+      }
     }
-    ctx.lineWidth = 2.25;
-    for (j = 0; j < OL; j++) {
-      var obk = ob[j];
-      if (!obk.length) continue;
-      ctx.strokeStyle = rgba(SKY, (j + 1) / OL * 0.9);
+    if (dots.length) {
+      ctx.lineWidth = 1.25;
+      ctx.strokeStyle = rgba(SKY, 0.32);
       ctx.beginPath();
-      for (k = 0; k < obk.length; k += 4) { ctx.moveTo(obk[k], obk[k + 1]); ctx.lineTo(obk[k + 2], obk[k + 3]); }
+      for (k = 0; k < trails.length; k += 4) { ctx.moveTo(trails[k], trails[k + 1]); ctx.lineTo(trails[k + 2], trails[k + 3]); }
       ctx.stroke();
-    }
-    for (j = 0; j < OL; j++) {
-      var hk = heads[j];
-      if (!hk.length) continue;
-      var hf = (j + 1) / OL;
-      ctx.fillStyle = rgba(SKY, 0.16 * hf);
+      ctx.fillStyle = rgba(SKY, 1);
       ctx.beginPath();
-      for (k = 0; k < hk.length; k += 2) { ctx.moveTo(hk[k] + gr, hk[k + 1]); ctx.arc(hk[k], hk[k + 1], gr, 0, TAU); }
+      for (k = 0; k < dots.length; k += 2) { ctx.moveTo(dots[k] + 2.5, dots[k + 1]); ctx.arc(dots[k], dots[k + 1], 2.5, 0, TAU); }
       ctx.fill();
-      ctx.beginPath();
-      for (k = 0; k < hk.length; k += 2) { ctx.moveTo(hk[k] + hr, hk[k + 1]); ctx.arc(hk[k], hk[k + 1], hr, 0, TAU); }
-      ctx.fillStyle = rgba(BG, hf);
-      ctx.fill();
-      ctx.lineWidth = 1.75;
-      ctx.strokeStyle = rgba(SKY, hf);
-      ctx.stroke();
     }
 
     /* personal models: soft rings that come into focus as refinement arrives */
@@ -584,12 +606,6 @@
       if (n.mine) {
         ctx.fillStyle = rgba(OR, 0.08 + 0.06 * n.f);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + 13, 0, TAU); ctx.fill();
-      }
-      /* the update lands: a sky ring opens around the personal model (0.8 s) */
-      var ff = n.f, fe = 1 - ff, rr = r + 3 + (1 - fe * fe) * 8;
-      if (ff > 0.01 && !n.mine) { /* (no sky wash over the orange halo of your model: it would turn grey) */
-        ctx.fillStyle = rgba(SKY, 0.1 * ff);
-        ctx.beginPath(); ctx.arc(n.x, n.y, rr, 0, TAU); ctx.fill();
       }
       ctx.fillStyle = rgba(BG, 1);
       ctx.beginPath(); ctx.arc(n.x, n.y, r + spread + 1.5, 0, TAU); ctx.fill();
@@ -605,10 +621,12 @@
         ctx.strokeStyle = rgba(OR, 0.38);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + 6.5, 0, TAU); ctx.stroke();
       }
-      if (ff > 0.01) {
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = rgba(SKY, 0.75 * ff);
-        ctx.beginPath(); ctx.arc(n.x, n.y, rr, 0, TAU); ctx.stroke();
+      /* the update lands: a fine sky ring opens from r+2 to r+7 and fades (0.6 s) */
+      if (n.land < 1) {
+        var lo = 1 - (1 - n.land) * (1 - n.land), base = n.mine ? r + 4.5 : r;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = rgba(SKY, 0.7 * (1 - n.land));
+        ctx.beginPath(); ctx.arc(n.x, n.y, base + 2 + 5 * lo, 0, TAU); ctx.stroke();
       }
     }
   };
@@ -671,11 +689,12 @@
     var yB = Math.round(h - padB) + 0.5, yT = padT;
     var yLim = Math.round(yT + (yB - yT) * 0.16) + 0.5;
     var M = 0.74;
-    var px0 = x0 + (small ? 10 : 18), px1 = x1 - (small ? 6 : 8);
+    var px0 = x0 + (small ? 15 : 20), px1 = x1 - (small ? 6 : 8);
+    var mx = x0 + (small ? 7 : 8); /* the size meter, just inside the y-axis */
     var self = this;
     this.X = function (c) { return px0 + c * (px1 - px0); };
     this.Y = function (v) { return yB - v * M * (yB - yLim); };
-    this.g = { x0: x0, x1: x1, yB: yB, yT: yT, yLim: yLim };
+    this.g = { x0: x0, x1: x1, yB: yB, yT: yT, yLim: yLim, mx: mx };
     var id = this.id, i, d = '', area = '';
     for (i = 0; i <= 120; i++) {
       var c = i / 120, x = this.X(c), y = this.Y(sizeOf(c));
@@ -716,15 +735,18 @@
       '<path d="M' + (x1 - 4.5) + ' ' + (yB - 3.5) + 'L' + x1 + ' ' + yB + 'L' + (x1 - 4.5) + ' ' + (yB + 3.5) + '"/>' +
       '</g>';
     /* fixed limit */
-    s += '<line class="ms-sf-limit" x1="' + x0 + '" x2="' + x1 + '" y1="' + yLim + '" y2="' + yLim + '"/>';
-    s += '<line class="ms-sf-limit-cap" x1="' + x0 + '" x2="' + x0 + '" y1="' + (yLim - 4) + '" y2="' + (yLim + 4) + '"/>';
+    /* (the dashes start just after the meter's red cap, so the cap reads on its own) */
+    s += '<line class="ms-sf-limit" x1="' + (mx + 6) + '" x2="' + x1 + '" y1="' + yLim + '" y2="' + yLim + '"/>';
+    /* the size meter: a fine track from the baseline up to the limit, capped by a red tick on the limit line */
+    s += '<line class="ms-sf-track" x1="' + mx + '" x2="' + mx + '" y1="' + yB + '" y2="' + yLim + '"/>';
+    s += '<line class="ms-sf-limit-cap" x1="' + (mx - 2) + '" x2="' + (mx + 2) + '" y1="' + yLim + '" y2="' + yLim + '"/>';
     /* curve */
     s += '<path class="ms-sf-curve" d="' + d + '" stroke="url(#' + id + 'c)"/>';
     /* moving marker */
     s += '<g class="ms-sf-mark">' +
       '<line class="ms-sf-drop" data-r="drop"/>' +
       '<line class="ms-sf-across" data-r="across"/>' +
-      '<rect class="ms-sf-bar" data-r="bar" width="3" rx="1.5"/>' +
+      '<path class="ms-sf-bar" data-r="bar"/>' +
       '<circle class="ms-sf-tick" data-r="tick" r="2.5"/>' +
       '<circle data-r="halo" fill="url(#' + id + 'g)"/>' +
       '<circle class="ms-sf-halo-ring" data-r="ring"/>' +
@@ -764,11 +786,12 @@
     var X = x.toFixed(2), Y = y.toFixed(2);
     r.drop.setAttribute('x1', X); r.drop.setAttribute('x2', X);
     r.drop.setAttribute('y1', (y + 5).toFixed(2)); r.drop.setAttribute('y2', g.yB);
-    r.across.setAttribute('x1', g.x0 + 3); r.across.setAttribute('x2', (x - 5).toFixed(2));
+    r.across.setAttribute('x1', g.mx + 5); r.across.setAttribute('x2', (x - 5).toFixed(2));
     r.across.setAttribute('y1', Y); r.across.setAttribute('y2', Y);
-    var bh = Math.max(0, g.yB - y);
-    r.bar.setAttribute('x', (g.x0 - 1.5).toFixed(2)); r.bar.setAttribute('y', Y); r.bar.setAttribute('height', bh.toFixed(2));
-    r.bar.style.opacity = bh < 3 ? (bh / 3).toFixed(2) : '';
+    /* the meter fill: a 4px rounded bar from the baseline up to the current size (caps inside the span) */
+    var bh = Math.max(0, g.yB - y), b0 = g.yB - 2, b1 = Math.min(b0, y + 2);
+    r.bar.setAttribute('d', 'M' + g.mx + ' ' + b0.toFixed(2) + 'V' + b1.toFixed(2));
+    r.bar.style.opacity = bh < 4 ? (bh / 4).toFixed(2) : '';
     r.tick.setAttribute('cx', X); r.tick.setAttribute('cy', g.yB);
     /* the less sure it is, the wider and softer the halo */
     var hr = 6 + 16 * (1 - c);

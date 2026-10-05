@@ -69,8 +69,9 @@
   border-top: 1px solid var(--line, #e2e8f0);
   font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
   font-size: 11px;
+  font-weight: 500;
   line-height: 1;
-  letter-spacing: .1em;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--muted, #64748b);
 }
@@ -134,9 +135,13 @@
   stroke-dasharray: 6 5;
 }
 [data-widget="safety"] .ms-sf-limit-cap {
-  stroke: var(--red, #ef4444);
-  stroke-width: 1.5;
+  stroke: var(--red-ink, #b91c1c);
+  stroke-width: 2;
   stroke-linecap: round;
+}
+[data-widget="safety"] .ms-sf-track {
+  stroke: var(--line, #e2e8f0);
+  stroke-width: 1;
 }
 [data-widget="safety"] .ms-sf-curve {
   fill: none;
@@ -153,7 +158,12 @@
 }
 [data-widget="safety"] .ms-sf-drop { stroke-opacity: .6; }
 [data-widget="safety"] .ms-sf-across { stroke-opacity: .35; }
-[data-widget="safety"] .ms-sf-bar { fill: var(--sky, #0ea5e9); }
+[data-widget="safety"] .ms-sf-bar {
+  fill: none;
+  stroke: var(--sky, #0ea5e9);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
 [data-widget="safety"] .ms-sf-tick { fill: var(--sky, #0ea5e9); }
 [data-widget="safety"] .ms-sf-halo-ring {
   fill: none;

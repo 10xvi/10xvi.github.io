@@ -73,7 +73,9 @@
     if (mount.__loopInit) return;
     mount.__loopInit = true;
 
-    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // read live: turning the OS setting on mid-session stills the ring at once
+    var rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    var reduced = !!(rmq && rmq.matches);
 
     /* ---------- palette ---------- */
     var C = [], INK = [], SLATE, LINE, LINE2, MUTED, HEAD, SKY, SKYD, BG, BGALT;
@@ -160,10 +162,14 @@
     applyStepColors();
 
     /* ---------- geometry ---------- */
-    var W = 0, H = 0, dpr = 1, cx = 0, cy = 0, R = 100, r0 = 40, Rf = 120, compact = false, bare = false, sc = 1, s = 1;
+    var W = 0, H = 0, dpr = 1, cx = 0, cy = 0, R = 100, r0 = 40, Rf = 120, compact = false, bare = false, inner = false, sc = 1, s = 1;
     var sx = [], sy = [];
 
     function stationAngle(q) { return A0 + q * TAU / 6; }
+    var POS = ['top', 'bottom', 'left', 'right'];
+    function setPos(lb, pos) {
+      for (var q = 0; q < 4; q++) lb.classList.toggle('lp-pos-' + POS[q], POS[q] === pos);
+    }
 
     function layout() {
       var rect = mount.getBoundingClientRect();
@@ -178,7 +184,11 @@
       bg.height = canvas.height;
       cx = W / 2; cy = H / 2;
 
-      compact = W < 440;
+      // a short, wide mount (the pinned ring on phones): the numbers move inside the track,
+      // so the dial can use the whole height instead of giving a row above and below to labels
+      inner = W > H * 1.3;
+      mount.classList.toggle('lp-inner', inner);
+      compact = inner || W < 440;
       mount.classList.toggle('lp-compact', compact);
 
       // measure labels so the dial is as large as the labels allow
@@ -200,27 +210,43 @@
         var rV = Math.min(H / 2 - pad - gapV - topH, H / 2 - pad - gapV - botH);
         R = Math.max(60, Math.min(rH, rV, Math.min(W, H) * 0.4));
       }
+      if (inner) {
+        pad = 8;
+        R = Math.min(W, H) / 2 - pad - 17;
+        for (it = 0; it < 3; it++) R = Math.min(W, H) / 2 - pad - faceExt(R);
+        R = Math.max(36, R);
+      }
       s = R / 200;
       sc = Math.max(0.8, s);
       Rf = R + faceExt(R);
-      r0 = R * (compact ? 0.55 : 0.47);
+      r0 = R * (inner ? 0.42 : compact ? 0.55 : 0.47);
       var gV = Rf + clear - R;
       var gS = Math.sqrt(Math.pow(Rf + clear, 2) - Math.pow(R / 2, 2)) - R * Math.cos(Math.PI / 6);
 
+      var gIn = 12;
       for (i = 0; i < 6; i++) {
         var a = stationAngle(i);
         sx[i] = cx + Math.cos(a) * R;
         sy[i] = cy + Math.sin(a) * R;
-        var lx = sx[i], ly = sy[i];
-        if (i === 0) ly -= gV;
-        else if (i === 3) ly += gV;
-        else if (i < 3) lx += gS;
-        else lx -= gS;
+        var lx = sx[i], ly = sy[i], pos;
+        if (inner) {
+          // inside the track, clear of the bead's glow; side numbers lean away from the radial feed line
+          if (i === 0) { ly += gIn; pos = 'bottom'; }
+          else if (i === 3) { ly -= gIn; pos = 'top'; }
+          else if (i < 3) { lx -= gIn; ly += i === 1 ? -2 : 2; pos = 'left'; }
+          else { lx += gIn; ly += i === 5 ? -2 : 2; pos = 'right'; }
+        } else {
+          if (i === 0) { ly -= gV; pos = 'top'; }
+          else if (i === 3) { ly += gV; pos = 'bottom'; }
+          else if (i < 3) { lx += gS; pos = 'right'; }
+          else { lx -= gS; pos = 'left'; }
+        }
+        setPos(labels[i], pos);
         labels[i].style.left = lx.toFixed(1) + 'px';
         labels[i].style.top = ly.toFixed(1) + 'px';
       }
       // a well too small for the caption (the pinned ring on phones) shows the model alone, centred
-      bare = r0 * 2 < 100;
+      bare = inner || r0 * 2 < 100;
       mount.classList.toggle('lp-bare', bare);
       core.style.left = cx + 'px';
       core.style.top = (cy + r0 * (compact ? 0.52 : 0.56)) + 'px';
@@ -266,7 +292,7 @@
     }
     var rc = 20, mcx = 0, mcy = 0;
     function buildModel() {
-      rc = r0 * (bare ? 0.5 : compact ? 0.34 : 0.4);
+      rc = r0 * (inner ? 0.58 : bare ? 0.5 : compact ? 0.34 : 0.4);
       mcx = cx;
       mcy = bare ? cy : cy - r0 * (compact ? 0.2 : 0.17);
     }
@@ -903,6 +929,20 @@
       io.observe(mount);
     }
     document.addEventListener('visibilitychange', update);
+    if (rmq) {
+      var onReduced = function () {
+        reduced = rmq.matches;
+        if (reduced) {
+          staticFrame(hovering >= 0 ? hovering : scrollK >= 0 ? scrollK : active);
+        } else {
+          mode = hovering >= 0 ? 'hold' : 'dwell'; tMode = 0; last = 0;
+          draw();
+        }
+        update();
+      };
+      if (rmq.addEventListener) rmq.addEventListener('change', onReduced);
+      else if (rmq.addListener) rmq.addListener(onReduced);
+    }
     document.addEventListener('site:unlocked', function () { relayout(); update(); onScroll(); });
     if ('MutationObserver' in window) {
       new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

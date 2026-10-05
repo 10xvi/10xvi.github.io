@@ -77,6 +77,8 @@
 [data-widget="morphology"] .gv-form    { fill: none; stroke: var(--orange, #f97316); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
 [data-widget="morphology"] .gv-dmg     { fill: none; stroke: var(--red, #ef4444); stroke-width: 1.5; stroke-dasharray: 3 3; stroke-linecap: round; }
 [data-widget="morphology"] .gv-heal    { fill: none; stroke: var(--sky, #0ea5e9); stroke-width: 6; stroke-linecap: round; }
+/* the healed arc keeps a faint sky seam until the phase changes */
+[data-widget="morphology"] .gv-seam    { fill: none; stroke: var(--sky, #0ea5e9); stroke-width: 1.25; stroke-linecap: round; }
 
 /* full 10X span, shown faintly before and under the growing bar */
 [data-widget="lifespan"] .gv-target { fill: rgba(249, 115, 22, .05); stroke: rgba(249, 115, 22, .5); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -141,9 +143,11 @@
 [data-widget="morphology"] .gv-tab:hover { color: var(--head, #0f172a); }
 [data-widget="morphology"] .gv-tab[aria-selected="true"] { color: var(--sky-ink, #0369a1); }
 [data-widget="morphology"] .gv-tab:focus { outline: none; }
+/* same ring colour as the rest of the site; inset, because the tabs sit on the plate's top edge */
 [data-widget="morphology"] .gv-tab:focus-visible {
-  outline: 2px solid var(--sky-ink, #0369a1);
-  outline-offset: -4px;
+  outline: 2px solid var(--orange-ink, #c2410c);
+  outline-offset: -2px;
+  border-radius: 8px;
 }
 @media (prefers-reduced-motion: reduce) {
   [data-widget="morphology"] .gv-tab { transition: none; }
