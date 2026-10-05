@@ -76,10 +76,31 @@
     // read live: turning the OS setting on mid-session stills the ring at once
     var rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = !!(rmq && rmq.matches);
+    // forced colours (Windows contrast themes): the canvas is not recoloured by the browser, so the
+    // figure redraws itself in the system palette, read live
+    var fcq = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+    var fc = !!(fcq && fcq.matches);
 
     /* ---------- palette ---------- */
     var C = [], INK = [], SLATE, LINE, LINE2, MUTED, HEAD, SKY, SKYD, BG, BGALT;
+    var FG = [0, 0, 0], HL = [0, 0, 0];      // forced colours: CanvasText and Highlight
+    var probe = null;
+    function sysColor(name, fb) {
+      // resolve a CSS system colour to rgb through a hidden probe that opts out of forcing
+      if (!probe) {
+        probe = document.createElement('span');
+        probe.setAttribute('aria-hidden', 'true');
+        probe.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;forced-color-adjust:none;';
+        mount.appendChild(probe);
+      }
+      probe.style.color = fb;
+      probe.style.color = name;
+      var v = '';
+      try { v = getComputedStyle(probe).color; } catch (e) { /* ignore */ }
+      return parseColor(v, fb);
+    }
     function readPalette() {
+      fc = !!(fcq && fcq.matches);
       for (var k = 0; k < 6; k++) {
         C[k] = cssVar(VARS[k], FALLBACK[k]);
         INK[k] = cssVar(INK_VARS[k], INK_FALLBACK[k]);
@@ -93,6 +114,19 @@
       SKYD = cssVar('--sky-deep', '#0284c7');
       BG = cssVar('--bg', '#ffffff');
       BGALT = cssVar('--bg-alt', '#f8fafc');
+      if (fc) {
+        // structure in CanvasText (secondary hairlines in GrayText), the signal and the active step in
+        // Highlight, fills in Canvas so nothing paints an opaque light disc on a dark theme
+        FG = sysColor('CanvasText', '#ffffff');
+        HL = sysColor('Highlight', '#1aebff');
+        var can = sysColor('Canvas', '#000000');
+        var gray = sysColor('GrayText', '#a0a0a0');
+        for (k = 0; k < 6; k++) C[k] = HL;
+        SLATE = MUTED = HEAD = SKYD = FG;
+        LINE = LINE2 = gray;
+        SKY = HL;
+        BG = BGALT = can;
+      }
     }
     readPalette();
     // colour of the signal at loop position pos: holds a station's colour, then blends into the next on approach
@@ -192,24 +226,32 @@
       mount.classList.toggle('lp-compact', compact);
 
       // measure labels so the dial is as large as the labels allow
-      var sideW = 0, topH = 0, botH = 0;
+      var leftW = 0, rightW = 0, topH = 0, botH = 0;
       for (var i = 0; i < 6; i++) {
         var w = labels[i].offsetWidth, h = labels[i].offsetHeight;
         if (i === 0) topH = h;
         else if (i === 3) botH = h;
-        else sideW = Math.max(sideW, w);
+        else if (i < 3) rightW = Math.max(rightW, w);
+        else leftW = Math.max(leftW, w);
       }
       var pad = 4, clear = compact ? 7 : 10;
+      // with names beside the ring, keep a clear margin to the column edge on both sides and centre the
+      // ring together with its labels: 'Understand' on the right is far wider than 'Verify' on the left,
+      // so the dial moves a little toward the shorter side (by at most 24px, so the well stays central)
+      var padX = compact ? pad : 16;
+      var shift = compact ? 0 : clamp((leftW - rightW) / 2, -24, 24);
       var faceExt = function (r) { return Math.max(17, 22 * Math.max(0.8, r / 200)); };
       R = Math.min(W, H) * 0.4;
       for (var it = 0; it < 4; it++) {
         var fe = faceExt(R);
         var gapV = fe + clear;
         var gapS = Math.sqrt(Math.pow(R + fe + clear, 2) - Math.pow(R / 2, 2)) - R * Math.cos(Math.PI / 6);
-        var rH = (W / 2 - pad - gapS - sideW) / Math.cos(Math.PI / 6);
+        var room = Math.min(W / 2 - padX - rightW - shift, W / 2 - padX - leftW + shift);
+        var rH = (room - gapS) / Math.cos(Math.PI / 6);
         var rV = Math.min(H / 2 - pad - gapV - topH, H / 2 - pad - gapV - botH);
         R = Math.max(60, Math.min(rH, rV, Math.min(W, H) * 0.4));
       }
+      cx = W / 2 + shift;
       if (inner) {
         pad = 8;
         R = Math.min(W, H) / 2 - pad - 17;
@@ -437,33 +479,38 @@
       c.lineJoin = 'round';
       var i, a, pt, pt2;
 
-      // dial plate: white, soft layered shadow, slate hairline
-      c.save();
+      // dial plate: white, soft layered shadow, slate hairline (forced colours: the outline alone)
+      if (!fc) {
+        c.save();
+        c.beginPath(); c.arc(cx, cy, Rf, 0, TAU);
+        c.fillStyle = rgbStr(BG);
+        c.shadowColor = 'rgba(15,23,42,0.10)';
+        c.shadowBlur = 30 * sc * dpr;
+        c.shadowOffsetY = 12 * sc * dpr;
+        c.fill();
+        c.shadowColor = 'rgba(15,23,42,0.06)';
+        c.shadowBlur = 3 * dpr;
+        c.shadowOffsetY = 1 * dpr;
+        c.fill();
+        c.restore();
+        // faint warm-to-sky wash so the plate is not flat white
+        var wash = c.createLinearGradient(cx - Rf, cy - Rf, cx + Rf, cy + Rf);
+        wash.addColorStop(0, rgba(C[1], 0.035));
+        wash.addColorStop(0.5, rgba(BG, 0));
+        wash.addColorStop(1, rgba(SKY, 0.035));
+        c.beginPath(); c.arc(cx, cy, Rf, 0, TAU);
+        c.fillStyle = wash; c.fill();
+      }
       c.beginPath(); c.arc(cx, cy, Rf, 0, TAU);
-      c.fillStyle = rgbStr(BG);
-      c.shadowColor = 'rgba(15,23,42,0.10)';
-      c.shadowBlur = 30 * sc * dpr;
-      c.shadowOffsetY = 12 * sc * dpr;
-      c.fill();
-      c.shadowColor = 'rgba(15,23,42,0.06)';
-      c.shadowBlur = 3 * dpr;
-      c.shadowOffsetY = 1 * dpr;
-      c.fill();
-      c.restore();
-      // faint warm-to-sky wash so the plate is not flat white
-      var wash = c.createLinearGradient(cx - Rf, cy - Rf, cx + Rf, cy + Rf);
-      wash.addColorStop(0, rgba(C[1], 0.035));
-      wash.addColorStop(0.5, rgba(BG, 0));
-      wash.addColorStop(1, rgba(SKY, 0.035));
-      c.beginPath(); c.arc(cx, cy, Rf, 0, TAU);
-      c.fillStyle = wash; c.fill();
       c.lineWidth = 1;
       c.strokeStyle = rgbStr(LINE);
       c.stroke();
-      // inner bezel hairline
-      c.beginPath(); c.arc(cx, cy, Rf - 4 * sc, 0, TAU);
-      c.strokeStyle = rgba(LINE, 0.7);
-      c.stroke();
+      // inner bezel hairline (decorative: left out in forced colours)
+      if (!fc) {
+        c.beginPath(); c.arc(cx, cy, Rf - 4 * sc, 0, TAU);
+        c.strokeStyle = rgba(LINE, 0.7);
+        c.stroke();
+      }
 
       // scale ticks
       tickR.t1 = R + 7 * sc;
@@ -486,7 +533,7 @@
         a = stationAngle(i);
         pt = polar(tickR.t1, a); pt2 = polar(tickR.major, a);
         c.beginPath(); c.moveTo(pt[0], pt[1]); c.lineTo(pt2[0], pt2[1]);
-        c.strokeStyle = rgba(C[i], 0.9);
+        c.strokeStyle = fc ? rgbStr(FG) : rgba(C[i], 0.9);
         c.lineWidth = 1.5;
         c.stroke();
       }
@@ -494,10 +541,17 @@
 
       // base track: neutral hairline with each step's colour washed in
       c.beginPath(); c.arc(cx, cy, R, 0, TAU);
-      c.strokeStyle = rgbStr(LINE);
-      c.lineWidth = 3 * sc;
-      c.stroke();
-      if (c.createConicGradient) {
+      if (fc) {
+        // forced colours: one solid CanvasText track, no colour wash
+        c.strokeStyle = rgbStr(FG);
+        c.lineWidth = 1.5;
+        c.stroke();
+      } else {
+        c.strokeStyle = rgbStr(LINE);
+        c.lineWidth = 3 * sc;
+        c.stroke();
+      }
+      if (fc) { /* no wash */ } else if (c.createConicGradient) {
         var g = c.createConicGradient(A0, cx, cy);
         for (i = 0; i <= 48; i++) g.addColorStop(i / 48, rgba(colorAt(i / 8), 0.55));
         c.beginPath(); c.arc(cx, cy, R, 0, TAU);
@@ -517,7 +571,7 @@
       var chev = Math.max(3.2, 4.2 * s);
       for (i = 0; i < 6; i++) {
         chevronPath(c, stationAngle(i + 0.5), chev);
-        c.strokeStyle = rgba(SLATE, 0.55);
+        c.strokeStyle = rgba(SLATE, fc ? 0.9 : 0.55);
         c.lineWidth = 1.25;
         c.stroke();
       }
@@ -537,9 +591,18 @@
       c.moveTo(f1[0] - ux * sz + px * sz * 0.75, f1[1] - uy * sz + py * sz * 0.75);
       c.lineTo(f1[0], f1[1]);
       c.lineTo(f1[0] - ux * sz - px * sz * 0.75, f1[1] - uy * sz - py * sz * 0.75);
-      c.strokeStyle = rgba(C[LEARN], 0.75);
+      c.strokeStyle = fc ? rgbStr(FG) : rgba(C[LEARN], 0.75);
       c.lineWidth = 1.25;
       c.stroke();
+
+      if (fc) {
+        // forced colours: the well is an outline only, no light fill and no shadows
+        c.beginPath(); c.arc(cx, cy, r0, 0, TAU);
+        c.strokeStyle = rgbStr(LINE);
+        c.lineWidth = 1;
+        c.stroke();
+        return;
+      }
 
       // station bead shadows (beads themselves are drawn per frame)
       var srS = Math.max(5, 6.8 * s);
@@ -575,7 +638,7 @@
     }
 
     function softDot(x, y, r, col, a) {
-      if (a <= 0.004) return;
+      if (a <= 0.004 || fc) return;        // decorative glow: none in forced colours
       var g = ctx.createRadialGradient(x, y, 0, x, y, r);
       g.addColorStop(0, rgba(col, a));
       g.addColorStop(1, rgba(col, 0));
@@ -688,10 +751,12 @@
           ctx.beginPath(); ctx.arc(x, y, sr, 0, TAU);
           ctx.fillStyle = rgba(col, gv); ctx.fill();
         }
+        // forced colours: resting stations in CanvasText, the lit one in Highlight
+        var ring = fc && gv <= 0.5 ? FG : col;
         ctx.beginPath(); ctx.arc(x, y, sr - 0.75, 0, TAU);
-        ctx.strokeStyle = rgbStr(col); ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.strokeStyle = rgbStr(ring); ctx.lineWidth = 1.5; ctx.stroke();
         ctx.beginPath(); ctx.arc(x, y, Math.max(1.6, sr * 0.32), 0, TAU);
-        ctx.fillStyle = gv > 0.5 ? rgba(BG, gv) : rgba(col, 1 - gv * 2);
+        ctx.fillStyle = gv > 0.5 ? rgba(BG, gv) : rgba(ring, 1 - gv * 2);
         ctx.fill();
       }
       /* dwell sweep around the resting station */
@@ -773,7 +838,9 @@
     /* ---------- run control ---------- */
     var raf = 0, last = 0, inView = true;
     function locked() { return document.documentElement.classList.contains('gate-locked'); }
-    function shouldRun() { return !reduced && inView && !locked() && !document.hidden && W > 0; }
+    // the site-wide "Pause animations" control (html.motion-paused, announced by 'site:motion')
+    function paused() { return document.documentElement.classList.contains('motion-paused'); }
+    function shouldRun() { return !reduced && !paused() && inView && !locked() && !document.hidden && W > 0; }
     function frame(now) {
       raf = 0;
       if (!shouldRun()) return;
@@ -814,6 +881,11 @@
     function hoverStation(k) {
       hovering = k;
       if (reduced) { staticFrame(k); return; }
+      if (paused()) {
+        // paused: no travel, the ring shows the chosen step at once and stays there
+        staticFrame(k); mode = 'hold'; tMode = 0;
+        return;
+      }
       goTo(k);
       setActive(k);
       if (!raf) draw();
@@ -904,7 +976,8 @@
     setActive(0);
     stGlow = [1, 0, 0, 0, 0, 0];
     layout();
-    if (reduced) staticFrame(0); else draw();
+    // reduced motion, or paused before anything has moved: the still where Learn has just closed the loop
+    if (reduced || paused()) staticFrame(0); else draw();
 
     function relayout() {
       readPalette();
@@ -943,9 +1016,25 @@
       if (rmq.addEventListener) rmq.addEventListener('change', onReduced);
       else if (rmq.addListener) rmq.addListener(onReduced);
     }
+    if (fcq) {
+      var onForced = function () { relayout(); };
+      if (fcq.addEventListener) fcq.addEventListener('change', onForced);
+      else if (fcq.addListener) fcq.addListener(onForced);
+    }
+    // pausing keeps the frame on screen as it is; resuming carries on from that same state
+    var wasPaused = paused();
+    function syncPause() {
+      var pz = paused();
+      if (pz !== wasPaused) {
+        wasPaused = pz;
+        if (!pz && !reduced && mode === 'hold' && hovering < 0) { mode = 'dwell'; tMode = 0; }
+      }
+      update();
+    }
+    document.addEventListener('site:motion', syncPause);
     document.addEventListener('site:unlocked', function () { relayout(); update(); onScroll(); });
     if ('MutationObserver' in window) {
-      new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      new MutationObserver(syncPause).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     }
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(relayout);

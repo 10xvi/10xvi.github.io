@@ -1,26 +1,58 @@
-// Page behaviour: nav state and progress, mobile menu, hero entrance, reveal on scroll,
-// in-page jumps, and the current-section marks (desktop links, tablet and phone chip).
+// Page behaviour: nav state and progress, mobile menu, the motion pause, hero entrance,
+// reveal on scroll, in-page jumps, and the current-section marks (desktop links, tablet and phone chip).
 (function () {
     window.__siteReady = true;
 
+    // ---------- Lookups, media queries and values shared with the CSS ----------
     var root = document.documentElement;
     var nav = document.getElementById('nav');
     var menuBtn = document.getElementById('menu-btn');
     var menu = document.getElementById('mobile-menu');
     var menuLinks = menu.querySelectorAll('a');
     var where = document.getElementById('where');
+    var motionBtns = document.querySelectorAll('[data-motion-toggle]');
     var reduceMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
-    function reduced() { return reduceMQ.matches; }
+    var desktopMQ = window.matchMedia('(min-width: 73.8125em)'); // 1181px at the default text size
+    var shortMQ = window.matchMedia('(max-height: 480px)');
+    function cssMs(name, fallback) {
+        var v = parseFloat(getComputedStyle(root).getPropertyValue(name));
+        return isNaN(v) ? fallback : v;
+    }
+    // The bar height lives in CSS (--nav-h, used by scroll-padding-top).
+    function navH() { return parseFloat(getComputedStyle(root).scrollPaddingTop) || 68; }
+    var T_EXIT = cssMs('--t-exit', 160);
+    var T_SWAP = cssMs('--dur-1', 150);
+
+    function paused() { return root.classList.contains('motion-paused'); }
+    // The on-page pause counts as reduced motion everywhere on the page.
+    function reduced() { return reduceMQ.matches || paused(); }
     function locked() { return root.classList.contains('gate-locked'); }
+    function onChange(mq, fn) {
+        if (mq.addEventListener) mq.addEventListener('change', fn);
+        else if (mq.addListener) mq.addListener(fn);
+    }
+    // '#id' (possibly percent-encoded) to its element, or null.
+    function targetFor(hash) {
+        var id = (hash || '').replace(/^#/, '');
+        try { id = decodeURIComponent(id); } catch (err) {}
+        return (id && document.getElementById(id)) || null;
+    }
 
     // ---------- Bar state and reading progress (one rAF per scroll burst) ----------
     var ticking = false;
+    var lastY = window.scrollY;
     function paint() {
         ticking = false;
         var y = window.scrollY;
-        var max = document.documentElement.scrollHeight - window.innerHeight;
+        var max = root.scrollHeight - window.innerHeight;
         nav.classList.toggle('scrolled', y > 24);
         nav.style.setProperty('--p', max > 0 ? Math.min(1, Math.max(0, y / max)).toFixed(4) : '0');
+        // Short viewports (landscape phones, 400% zoom): the bar steps aside while reading down
+        // and comes back on the way up. The CSS applies the class only under (max-height: 480px).
+        var dy = y - lastY;
+        if (y < 80 || dy < -6) nav.classList.remove('tuck');
+        else if (dy > 6 && !menu.classList.contains('open')) nav.classList.add('tuck');
+        lastY = y;
     }
     function onScroll() {
         if (ticking || locked()) return;
@@ -42,20 +74,22 @@
         if (menu.classList.contains('closing')) finishClose();
     });
 
-    function setMenu(open) {
+    function setMenu(open, opts) {
         // Hand focus back to the button before the menu (and the focused link in it) disappears.
-        if (!open && menu.contains(document.activeElement)) menuBtn.focus();
+        if (!open && ((opts && opts.refocus) || menu.contains(document.activeElement))) menuBtn.focus();
         clearTimeout(closeTimer);
         if (open) {
+            nav.classList.remove('tuck');
             menu.classList.remove('closing');
             menu.classList.add('open');
         } else if (menu.classList.contains('open')) {
-            if (reduced() || desktop.matches) {
+            if (reduced() || desktopMQ.matches) {
                 finishClose();
             } else {
                 // Play the exit; the page underneath is scrollable again straight away.
+                // The timer is a fallback for a missed animationend.
                 menu.classList.add('closing');
-                closeTimer = setTimeout(finishClose, 220);
+                closeTimer = setTimeout(finishClose, T_EXIT + 60);
             }
         }
         menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -66,21 +100,10 @@
         setMenu(!isOpen());
     });
 
-    // After an in-page jump, move keyboard focus to the section's heading without scrolling again.
-    function focusTarget(hash) {
-        var id = hash.slice(1);
-        var target = id && document.getElementById(id);
-        if (!target) return;
-        var heading = target.querySelector('h2') || target;
-        if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
-        setTimeout(function () { heading.focus({ preventScroll: true }); }, 0);
-    }
-
     document.addEventListener('keydown', function (e) {
         if (!isOpen()) return;
         if (e.key === 'Escape') {
-            setMenu(false);
-            menuBtn.focus();
+            setMenu(false, { refocus: true });
             return;
         }
         // Keep Tab inside the open menu: button, then the links, then back to the button.
@@ -102,7 +125,8 @@
             }
         }
     });
-    // A tap outside the open menu closes it instead of reaching the page underneath.
+    // Capture phase, so it runs before the jump handler below: a tap outside the open menu
+    // only closes it and never reaches the page underneath.
     document.addEventListener('click', function (e) {
         if (isOpen() && !e.target.closest('#nav')) {
             e.preventDefault();
@@ -111,24 +135,59 @@
         }
     }, true);
     // Leaving the phone layout (rotation, resize) closes the menu so the scroll lock never sticks.
-    var desktop = window.matchMedia('(min-width: 1181px)');
-    var onLayout = function () { if (desktop.matches && menu.classList.contains('open')) setMenu(false); };
-    if (desktop.addEventListener) desktop.addEventListener('change', onLayout);
-    else if (desktop.addListener) desktop.addListener(onLayout);
+    onChange(desktopMQ, function () { if (desktopMQ.matches && menu.classList.contains('open')) setMenu(false); });
+    onChange(shortMQ, function () { nav.classList.remove('tuck'); });
+
+    // ---------- Motion pause: one switch for every moving figure (WCAG 2.2.2) ----------
+    function syncMotion() {
+        var p = paused();
+        var label = p ? 'Play animations' : 'Pause animations';
+        motionBtns.forEach(function (b) {
+            var text = b.querySelector('.motion-label');
+            if (text) text.textContent = label;
+            else b.setAttribute('aria-label', label);
+            b.classList.toggle('is-paused', p);
+        });
+    }
+    function setMotion(p) {
+        root.classList.toggle('motion-paused', p);
+        if (p) root.classList.remove('hero-enter');
+        try {
+            if (p) localStorage.setItem('10x-motion', 'paused');
+            else localStorage.removeItem('10x-motion');
+        } catch (err) {}
+        syncMotion();
+        // Widgets listen on document; bubbles so a window listener hears it too.
+        document.dispatchEvent(new CustomEvent('site:motion', { bubbles: true, detail: { paused: p } }));
+    }
+    motionBtns.forEach(function (b) {
+        b.addEventListener('click', function () { setMotion(!paused()); });
+    });
+    syncMotion();
 
     // ---------- Reveal on scroll ----------
     var reveals = document.querySelectorAll('.reveal');
     var revealer = null;
-    function show(el, instant) {
+    // The one way a block is revealed: instantly (it was jumped over) or with an optional stagger delay.
+    function show(el, opts) {
         if (el.classList.contains('in')) return;
+        var instant = opts && opts.instant;
+        var delay = (opts && opts.delay) || 0;
         if (instant) el.classList.add('skip-reveal');
+        else if (delay) {
+            el.style.transitionDelay = delay + 'ms';
+            el.addEventListener('transitionend', function clear() {
+                el.style.transitionDelay = '';
+                el.removeEventListener('transitionend', clear);
+            });
+        }
         el.classList.add('in');
         if (revealer) revealer.unobserve(el);
     }
     // Content that sits above the viewport after a jump is simply present, so it never rises against the scroll.
     function settleAbove() {
         reveals.forEach(function (el) {
-            if (!el.classList.contains('in') && el.getBoundingClientRect().bottom < 0) show(el, true);
+            if (!el.classList.contains('in') && el.getBoundingClientRect().bottom < 0) show(el, { instant: true });
         });
     }
 
@@ -137,18 +196,8 @@
             var i = 0;
             entries.forEach(function (entry) {
                 if (!entry.isIntersecting) return;
-                var el = entry.target;
                 // Blocks arriving together (side by side, or a figure and its list) start one after another.
-                var d = Math.min(i++, 3) * 90;
-                if (d) {
-                    el.style.transitionDelay = d + 'ms';
-                    el.addEventListener('transitionend', function clear() {
-                        el.style.transitionDelay = '';
-                        el.removeEventListener('transitionend', clear);
-                    });
-                }
-                el.classList.add('in');
-                revealer.unobserve(el);
+                show(entry.target, { delay: Math.min(i++, 3) * 90 });
             });
         }, { rootMargin: '0px 0px -10% 0px' });
         reveals.forEach(function (el) { revealer.observe(el); });
@@ -157,13 +206,16 @@
     }
 
     // ---------- In-page jumps: a short glide, and the destination is already readable on arrival ----------
-    function jumpTo(hash) {
-        var id = hash.slice(1);
-        var target = id && document.getElementById(id);
-        if (!target) return false;
+    // After a jump, move keyboard focus to the section's heading without scrolling again.
+    function focusTarget(target) {
+        var heading = target.querySelector('h2') || target;
+        if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+        setTimeout(function () { heading.focus({ preventScroll: true }); }, 0);
+    }
+    function jumpTo(target) {
         // Start the destination's fade now, so it is readable when the glide ends (sections only, not #top).
         if (target.tagName === 'SECTION') target.querySelectorAll('.reveal').forEach(function (el) { show(el); });
-        var d = target.getBoundingClientRect().top - 68;
+        var d = target.getBoundingClientRect().top - navH();
         var far = 2.5 * window.innerHeight;
         if (!reduced() && Math.abs(d) > far) {
             window.scrollTo({ top: window.scrollY + d - Math.sign(d) * 0.75 * window.innerHeight, behavior: 'instant' });
@@ -171,9 +223,9 @@
         }
         target.scrollIntoView({ behavior: reduced() ? 'instant' : 'smooth', block: 'start' });
         if (reduced()) settleAbove();
-        return true;
     }
 
+    // Bubble phase, after the capture-phase outside-tap handler above has had its say.
     document.addEventListener('click', function (e) {
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         var a = e.target.closest('a[href^="#"]');
@@ -181,18 +233,18 @@
         var hash = a.getAttribute('href');
         var inMenu = menu.contains(a);
         if (inMenu) setMenu(false);
-        if (hash.length < 2 || !jumpTo(hash)) return;
+        var target = hash.length > 1 && targetFor(hash);
+        if (!target) return;
+        jumpTo(target);
         e.preventDefault();
         if (location.hash !== hash) history.pushState(null, '', hash);
-        if (inMenu || a.closest('.links') || a.closest('.actions')) focusTarget(hash);
+        if (inMenu || a.closest('.links') || a.closest('.actions')) focusTarget(target);
     });
 
     // ---------- Unlock: hero entrance, or a settled page under a deep link ----------
     document.addEventListener('site:unlocked', function () {
         paint();
-        var id = location.hash.slice(1);
-        try { id = decodeURIComponent(id); } catch (err) {}
-        if (id && document.getElementById(id)) {
+        if (targetFor(location.hash)) {
             // The gate scrolls to the target right after this event; settle what lies above it.
             requestAnimationFrame(function () { settleAbove(); paint(); });
             return;
@@ -245,7 +297,7 @@
         if (where.classList.contains('on') && !reduced()) {
             // Cross-fade: out, swap the words, back in.
             where.classList.remove('on');
-            swapTimer = setTimeout(apply, 150);
+            swapTimer = setTimeout(apply, T_SWAP);
         } else {
             apply();
         }

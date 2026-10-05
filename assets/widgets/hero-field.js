@@ -13,6 +13,8 @@
 
   function isReduced() { return !!(mqReduce && mqReduce.matches); }
   function isLocked() { return document.documentElement.classList.contains('gate-locked'); }
+  /* the site-wide "Pause animations" control: the field holds its current frame until resumed */
+  function isPaused() { return document.documentElement.classList.contains('motion-paused'); }
   function hash(a, b) {
     var h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -150,6 +152,16 @@
     var t = 0, running = false, raf = 0, last = 0, visible = true, shown = false;
     var ev = { st: 'idle', until: calm ? 9 : 3.5, t0: 0, rec: 0, cx: 0, cy: 0, R: 1 };
     var ptr = { x: -1e5, y: -1e5, lx: null, ly: null, e: 0, tx: 0, ty: 0, ox: 0, oy: 0 };
+    /* the canvas box in page coordinates, so pointer events never need a layout read */
+    var box = { x: 0, y: 0, w: 1, h: 1 }, boxAge = 0, ptrOn = false, usePtr = finePointer && !calm;
+    function measure(r) {
+      r = r || cv.getBoundingClientRect();
+      box.x = r.left + (window.pageXOffset || 0);
+      box.y = r.top + (window.pageYOffset || 0);
+      box.w = Math.max(1, r.width);
+      box.h = Math.max(1, r.height);
+      boxAge = 0;
+    }
 
     cv.setAttribute('aria-hidden', 'true');
     cv.style.opacity = '0';
@@ -723,6 +735,8 @@
       if (!(dt > 0)) dt = 1 / 60;
       if (dt > .1) dt = .1;
       t += dt;
+      /* the hero does not move on the page, but re-check its box now and then (about every 1.5 s) */
+      if (ptrOn && ++boxAge > 90) measure();
       update(dt);
       render();
       raf = requestAnimationFrame(frame);
@@ -736,18 +750,30 @@
       update(0);
       render();
     }
+    function listen(on) {
+      if (!usePtr || on === ptrOn) return;
+      ptrOn = on;
+      ptr.lx = null;
+      if (on) { measure(); window.addEventListener('pointermove', onPtr, { passive: true }); }
+      else window.removeEventListener('pointermove', onPtr, { passive: true });
+    }
     function evaluate() {
       if (!W) return;
-      var locked = isLocked(), reduce = isReduced();
-      var should = visible && !document.hidden && !locked && !reduce;
+      var locked = isLocked(), reduce = isReduced(), paused = isPaused();
+      var should = visible && !document.hidden && !locked && !reduce && !paused;
       if (should && !running) {
         running = true;
+        /* leaving the reduced-motion still: the next waves pull its out-of-step patch back into rhythm */
+        if (ev.st === 'static') { ev.st = 'recover'; ev.rec = t; }
         last = performance.now();
+        listen(true);
         if (!raf) raf = requestAnimationFrame(frame);
       } else if (!should && running) {
+        /* stop where we are: the last drawn frame stays on the canvas */
         running = false;
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
+        listen(false);
       }
       if (!locked && !shown) {
         shown = true;
@@ -764,6 +790,7 @@
     function relayout() {
       if (!near) return;
       var r = cv.getBoundingClientRect();
+      if (usePtr) measure(r);
       var nw = Math.round(r.width), nh = Math.round(r.height);
       if (nw === lastW && nh === lastH) return;
       lastW = nw; lastH = nh;
@@ -779,6 +806,7 @@
       running = false;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
+      listen(false);
       cv.width = cv.height = 0;
       lastW = lastH = 0; W = 0;
     }
@@ -806,19 +834,18 @@
       else if (mqReduce.addListener) mqReduce.addListener(onMQ);
     }
 
-    /* pointer: moving the cursor gently excites nearby cells (desktop, hero only) */
-    if (finePointer && !calm) {
-      window.addEventListener('pointermove', function (e) {
-        if (!running || e.pointerType !== 'mouse') return;
-        var r = cv.getBoundingClientRect();
-        var x = e.clientX - r.left, y = e.clientY - r.top;
-        if (x < 0 || y < 0 || x > r.width || y > r.height) { ptr.lx = null; return; }
-        if (ptr.lx !== null) ptr.e = Math.min(1, ptr.e + Math.hypot(x - ptr.lx, y - ptr.ly) * .006);
-        ptr.lx = x; ptr.ly = y;
-        ptr.x = x; ptr.y = y;
-        ptr.tx = -(x / r.width - .5) * 16;
-        ptr.ty = -(y / r.height - .5) * 10;
-      }, { passive: true });
+    /* pointer: moving the cursor gently excites nearby cells (desktop, hero only).
+       Attached only while the field runs (on screen, not paused); page coordinates
+       against the cached box, so a mouse move never forces a layout. */
+    function onPtr(e) {
+      if (!running || e.pointerType !== 'mouse') { ptr.lx = null; return; }
+      var x = e.pageX - box.x, y = e.pageY - box.y;
+      if (x < 0 || y < 0 || x > box.w || y > box.h) { ptr.lx = null; return; }
+      if (ptr.lx !== null) ptr.e = Math.min(1, ptr.e + Math.hypot(x - ptr.lx, y - ptr.ly) * .006);
+      ptr.lx = x; ptr.ly = y;
+      ptr.x = x; ptr.y = y;
+      ptr.tx = -(x / box.w - .5) * 16;
+      ptr.ty = -(y / box.h - .5) * 10;
     }
   }
 
@@ -843,6 +870,7 @@
   }
   document.addEventListener('site:unlocked', function () { setTimeout(create, 0); });
   document.addEventListener('visibilitychange', evalAll);
+  document.addEventListener('site:motion', evalAll);
   if ('MutationObserver' in window) {
     new MutationObserver(evalAll).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
   }

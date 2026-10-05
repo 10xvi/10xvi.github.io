@@ -1,17 +1,14 @@
 /* 10X Vital Intelligence (light): model-safety widgets, scoped to their mounts */
 
-/* the world model draws its own card: white, fine slate hairline, soft shadow.
+/* ---------- (a) Vital World Model ----------
+   The world model draws its own card: white, fine slate hairline, soft shadow.
    The safety chart sits directly on the page's white safety panel. */
 [data-widget="world-model"] {
   box-sizing: border-box;
   background: var(--bg, #ffffff);
   border: 1px solid var(--line, #e2e8f0);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12);
-}
-
-/* ---------- (a) Vital World Model ---------- */
-[data-widget="world-model"] {
+  border-radius: var(--r-plate, 16px);
+  box-shadow: var(--shadow-plate, 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12));
   position: relative;
   display: flex;
   flex-direction: column;
@@ -179,6 +176,7 @@
 [data-widget="safety"] .ms-sf-t {
   font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
   font-size: 11px;
+  font-weight: 500;
   letter-spacing: .14em;
   text-transform: uppercase;
   fill: var(--muted, #64748b);
@@ -194,4 +192,39 @@
 @media (max-width: 560px) {
   [data-widget="safety"] { height: 260px; }
   [data-widget="safety"] .ms-sf-plot { inset: 0 2px 0 2px; }
+}
+
+/* ---------- forced colors ----------
+   The chart's white text halo (stroke: --bg) stayed white on a dark Canvas and read as hollow
+   outlines. The chart now opts out of forcing and draws in system colours only: CanvasText for
+   labels and structure, Highlight for the moving reading, no decorative gradients or glows. */
+@media (forced-colors: active) {
+  [data-widget="safety"] .ms-sf-svg { forced-color-adjust: none; }
+  [data-widget="safety"] .ms-sf-zone,
+  [data-widget="safety"] .ms-sf-area,
+  [data-widget="safety"] .ms-sf-halo { display: none; }
+  [data-widget="safety"] .ms-sf-hatch-line { stroke: GrayText; stroke-opacity: .6; }
+  [data-widget="safety"] .ms-sf-axis { stroke: CanvasText; }
+  [data-widget="safety"] .ms-sf-grid line,
+  [data-widget="safety"] .ms-sf-track { stroke: GrayText; }
+  [data-widget="safety"] .ms-sf-limit,
+  [data-widget="safety"] .ms-sf-limit-cap { stroke: CanvasText; }
+  [data-widget="safety"] .ms-sf-curve,
+  [data-widget="safety"] .ms-sf-halo-ring,
+  [data-widget="safety"] .ms-sf-drop,
+  [data-widget="safety"] .ms-sf-across,
+  [data-widget="safety"] .ms-sf-bar { stroke: Highlight; }
+  [data-widget="safety"] .ms-sf-drop,
+  [data-widget="safety"] .ms-sf-across { stroke-opacity: 1; }
+  [data-widget="safety"] .ms-sf-tick { fill: Highlight; }
+  [data-widget="safety"] .ms-sf-dot { fill: Canvas; stroke: Highlight; filter: none; }
+  [data-widget="safety"] .ms-sf-t,
+  [data-widget="safety"] .ms-sf-title,
+  [data-widget="safety"] .ms-sf-red { fill: CanvasText; stroke: Canvas; }
+  [data-widget="safety"] .ms-sf-plate { fill: Canvas; }
+  /* the world model: its canvas switches to system colours itself (JS); the HTML labels and the
+     legend glyphs follow, so the key still matches the marks */
+  [data-widget="world-model"] .ms-lbl { background: Canvas; color: CanvasText; }
+  [data-widget="world-model"] .ms-wm-key svg { forced-color-adjust: none; }
+  [data-widget="world-model"] .ms-wm-key polyline { stroke: CanvasText; }
 }

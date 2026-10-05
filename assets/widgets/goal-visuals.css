@@ -30,6 +30,8 @@
   [data-widget="morphology"] .gv-plate { height: 232px; border-radius: 14px; }
 }
 
+/* morphology: the figure (role="img") fills the tab panel */
+[data-widget="morphology"] .gv-fig { position: absolute; inset: 0; }
 [data-widget="lifespan"] .gv-svg,
 [data-widget="morphology"] .gv-svg {
   position: absolute;
@@ -121,7 +123,7 @@
   white-space: nowrap;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: color .3s ease;
+  transition: color var(--dur-2, 250ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1));
 }
 [data-widget="morphology"] .gv-tab > span { display: block; margin-right: -.14em; }
 [data-widget="morphology"] .gv-tab::before,
@@ -153,17 +155,51 @@
   [data-widget="morphology"] .gv-tab { transition: none; }
 }
 
-/* Windows high contrast: let text and hairlines take system colours */
+/* Forced colours (Windows high contrast): text and essential strokes take system
+   colours, Highlight marks the emphasised element (the healthy years; the target and
+   the wound), and decorative fills, sheens, glows and shadows drop out. */
 @media (forced-colors: active) {
   [data-widget] .gv-svg text,
   [data-widget] .gv-svg .gv-lbl,
   [data-widget] .gv-svg .gv-lbl-hi,
   [data-widget] .gv-svg .gv-lbl-o,
   [data-widget] .gv-svg .gv-lbl-s { fill: CanvasText; }
-  [data-widget] .gv-svg .gv-sw { forced-color-adjust: none; }
+  [data-widget] .gv-svg .gv-grid { stroke: CanvasText; opacity: .22; }
+  [data-widget] .gv-svg .gv-rule { stroke: CanvasText; opacity: .5; }
+
+  /* lifespan: healthy years = Highlight bars cut into spans by Canvas dividers; decline = a CanvasText line */
+  [data-widget="lifespan"] .gv-sw-h { fill: Highlight; }
+  [data-widget="lifespan"] .gv-sw-d { fill: Canvas; stroke: CanvasText; stroke-width: 1; }
+  [data-widget="lifespan"] .gv-ha { fill: Highlight; filter: none; }
+  [data-widget="lifespan"] .gv-hv,
+  [data-widget="lifespan"] .gv-shim,
+  [data-widget="lifespan"] .gv-halo,
+  [data-widget="lifespan"] .gv-da { display: none; }
+  [data-widget="lifespan"] .gv-line { stroke: CanvasText; }
+  [data-widget="lifespan"] .gv-line-h { stroke: Highlight; }
+  [data-widget="lifespan"] .gv-base,
+  [data-widget="lifespan"] .gv-tick,
+  [data-widget="lifespan"] .gv-guide { stroke: CanvasText; stroke-opacity: 1; }
+  [data-widget="lifespan"] .gv-tick-on { stroke: Highlight; }
+  [data-widget="lifespan"] .gv-div { stroke: Canvas; stroke-opacity: 1; }
+  [data-widget="lifespan"] .gv-target { fill: none; stroke: CanvasText; }
+  [data-widget="lifespan"] .gv-head { fill: Canvas; stroke: Highlight; }
+
+  /* morphology: the form in CanvasText on Canvas; target pattern, wound and seam in Highlight */
+  [data-widget="morphology"] .gv-body { fill: Canvas; filter: none; }
+  [data-widget="morphology"] .gv-form,
+  [data-widget="morphology"] .gv-inner,
+  [data-widget="morphology"] .gv-cross { stroke: CanvasText; }
+  [data-widget="morphology"] .gv-dots { fill: CanvasText; }
+  [data-widget="morphology"] .gv-ghost,
+  [data-widget="morphology"] .gv-dmg,
+  [data-widget="morphology"] .gv-seam { stroke: Highlight; }
+  [data-widget="morphology"] .gv-heal { display: none; }
+
   [data-widget="morphology"] .gv-tab { color: ButtonText; }
   [data-widget="morphology"] .gv-tab[aria-selected="true"] { color: Highlight; }
-  [data-widget="morphology"] .gv-tab::before { background: GrayText; forced-color-adjust: none; }
+  /* the track is a quiet CanvasText rail (GrayText reads as "disabled"); progress fills in Highlight */
+  [data-widget="morphology"] .gv-tab::before { background: CanvasText; opacity: .3; forced-color-adjust: none; }
   [data-widget="morphology"] .gv-tab::after { background: Highlight; forced-color-adjust: none; }
   [data-widget="morphology"] .gv-tab:focus-visible { outline-color: Highlight; }
 }

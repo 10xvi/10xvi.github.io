@@ -21,6 +21,9 @@
 @media (max-width:999px){[data-widget="coordination"] .cw-label{letter-spacing:.14em;gap:9px;font-size:11px}}
 @media (max-width:759px){[data-widget="coordination"] .cw-label{font-size:12px;letter-spacing:.14em;gap:12px}}
 [data-widget="coordination"] .cw-track{position:absolute;inset:0}
+/* wider screens: each card's name eases in with its tissue, left to right, the first time the figure plays */
+[data-widget="coordination"].cw-intro .cw-head{opacity:0}
+[data-widget="coordination"].cw-intro .cw-head.on{opacity:1;transition:opacity 600ms cubic-bezier(.2,.7,.2,1)}
 [data-widget="coordination"] .cw-steps{display:none}
 /* phones: one card plays the three stages in turn; the indicator above names them, fills as each one
    plays, and lets the reader jump to a stage */
@@ -43,8 +46,21 @@
   [data-widget="coordination"] .cw-t0 .cw-bf{background:linear-gradient(90deg,var(--orange,#f97316),var(--amber,#f59e0b))}
   [data-widget="coordination"] .cw-t1 .cw-bf{background:repeating-linear-gradient(90deg,var(--muted,#64748b) 0 6px,transparent 6px 10px)}
   [data-widget="coordination"] .cw-t2 .cw-bf{background:linear-gradient(90deg,var(--sky,#0ea5e9),var(--orange,#f97316))}
-  [data-widget="coordination"] .cw-head{opacity:0;transition:opacity 160ms cubic-bezier(.65,0,.35,1)}
-  [data-widget="coordination"] .cw-head.on{opacity:1;transition-duration:300ms}
-  [data-widget="coordination"] .cw-rule{display:none}
+  /* the indicator names the stage, so the card carries no head of its own */
+  [data-widget="coordination"] .cw-head{display:none}
+}
+@media (forced-colors:active){
+  [data-widget="coordination"] .cw-rule{forced-color-adjust:none;background:GrayText}
+  [data-widget="coordination"] .cw-fill{forced-color-adjust:none}
+  [data-widget="coordination"] .cw-s0 .cw-fill{background:CanvasText}
+  [data-widget="coordination"] .cw-s1 .cw-fill{background:GrayText}
+  [data-widget="coordination"] .cw-s2 .cw-fill{background:Highlight}
+}
+/* forced colours: the bars keep their progress (GrayText track, CanvasText done, Highlight for the stage in play) */
+@media (max-width:560px) and (forced-colors:active){
+  [data-widget="coordination"] .cw-bar{forced-color-adjust:none;background:GrayText}
+  [data-widget="coordination"] .cw-step .cw-bf{forced-color-adjust:none;background:CanvasText}
+  [data-widget="coordination"] .cw-step.on .cw-bf{background:Highlight}
+  [data-widget="coordination"] .cw-step.on .cw-sn,[data-widget="coordination"] .cw-step.on .cw-num{color:Highlight}
 }
 @media (prefers-reduced-motion:reduce){[data-widget="coordination"] .cw-head,[data-widget="coordination"] .cw-sn{transition:none}}

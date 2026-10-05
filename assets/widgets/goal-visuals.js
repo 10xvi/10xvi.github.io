@@ -41,6 +41,8 @@
   // JetBrains Mono advance is 0.6em; labels use .14em tracking at 11px.
   function textW(s) { return s.length * (11 * 0.6 + 11 * 0.14) - 11 * 0.14; }
   function locked() { return root.classList.contains('gate-locked'); }
+  // site-wide "Pause animations" control (layout): html.motion-paused + document 'site:motion'
+  function paused() { return root.classList.contains('motion-paused'); }
 
   /* Shared plate: unit grid (column width = one "Today" healthy span), header. */
   function plate(svg, W, H, id) {
@@ -67,12 +69,14 @@
   /* ---------- runtime: one rAF loop for all widgets ---------- */
   var widgets = [], raf = 0, last = 0;
   function active() {
-    if (reduce || locked() || document.hidden) return false;
+    if (reduce || paused() || locked() || document.hidden) return false;
     for (var i = 0; i < widgets.length; i++) if (widgets[i].visible) return true;
     return false;
   }
   function tick(now) {
     raf = 0;
+    // paused between frames: stop at once, so the frame on screen is exactly the one kept
+    if (paused() || locked()) { last = 0; return; }
     // 0.12 s cap: slow frames still advance the intros at true speed, while a
     // tab switch or scroll-away (both pause the loop) cannot cause a jump
     var dt = last ? Math.min(0.12, (now - last) / 1000) : 0;
@@ -91,10 +95,45 @@
     if (!raf && active()) { last = 0; raf = requestAnimationFrame(tick); }
   }
 
+  /* Pause: the loop stops and the frame on screen stays (each clock simply stops
+     advancing). On resume the clocks carry on from that frame (dt is 0 on the first
+     tick). A figure that has not started yet has no frame of its own to keep, so it
+     shows its settled still instead of an empty plate; if it was never seen paused,
+     it gets its entrance back on resume. */
+  var wasPaused = false;
+  function freeze(w) {
+    // (the first 0.15 s of a clock are still its blank opening frame)
+    if (w.started && w.t > 0.15) return;
+    if (!w.started) w.pre = true;
+    w.started = true;
+    w.t = w.still;
+    if (w.W) w.draw();
+  }
+  function syncPause() {
+    var p = paused();
+    if (p === wasPaused) return;
+    wasPaused = p;
+    if (p) {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      last = 0;
+      if (!reduce) widgets.forEach(freeze);
+    } else {
+      widgets.forEach(function (w) {
+        // frozen before its start and never in view since: let it enter as usual
+        if (w.pre && !w.ratio) { w.pre = false; w.started = false; w.t = 0; if (w.reset) w.reset(); if (w.W) w.draw(); }
+        w.pre = false;
+        w.update();
+      });
+      pairCheck(); // a reset pair gets its stagger back
+      kick();
+    }
+  }
+
   // a figure's clock starts once this much of its plate is in view (then runs while any of it is)
   var START_RATIO = 0.35;
-  // side-by-side goal cards: the morphology starts this much later, so the eye takes the lifespan first
-  var STAGGER = 1.2;
+  // side-by-side goal cards: the morphology starts this much later, so the eye takes the lifespan
+  // first (the site's motion spec: figures side by side stagger by about 500ms, left first)
+  var STAGGER = 0.5;
 
   /* Wait for the card's reveal (site.js adds .in) before a clock may run, so a
      figure never plays under a fading wrapper. Returns true when already clear. */
@@ -121,12 +160,15 @@
     w.el = el; w.t = 0; w.visible = false; w.W = 0; w.H = 0;
     w.delay = 0; w.started = false; w.ratio = 0;
     function update() {
+      if (w.ratio > 0 && wasPaused) w.pre = false; // its still has been on screen
       var on = !!w.ready && w.ratio > 0 && (w.started || w.ratio >= START_RATIO);
       // a figure the reader has already operated (a tab chosen early) skips the stagger
       if (on && !w.started) { w.started = true; if (!w.touched) w.t = -w.delay; }
       w.visible = on;
     }
+    w.update = update;
     w.ready = watchReveal(el, w, update);
+    if (wasPaused && !reduce) freeze(w);
     function layout() {
       pairCheck();
       var r = svg.getBoundingClientRect();
@@ -224,10 +266,10 @@
 
       // header: swatch legend (a key, deliberately unlike the morphology tabs)
       var hx = x0, hy = 24, sw = 10;
-      mk('rect', { x: f(hx), y: hy - 9, width: sw, height: sw, rx: 2.5, fill: 'url(#' + id + 'kh)', 'class': 'gv-sw' }, svg);
+      mk('rect', { x: f(hx), y: hy - 9, width: sw, height: sw, rx: 2.5, fill: 'url(#' + id + 'kh)', 'class': 'gv-sw gv-sw-h' }, svg);
       txt(svg, hx + sw + 8, hy, 'Healthy years', 'gv-lbl gv-lbl-hi');
       var hx2 = hx + sw + 8 + textW('Healthy years') + 22;
-      mk('rect', { x: f(hx2), y: hy - 9, width: sw, height: sw, rx: 2.5, fill: 'url(#' + id + 'k)', 'class': 'gv-sw' }, svg);
+      mk('rect', { x: f(hx2), y: hy - 9, width: sw, height: sw, rx: 2.5, fill: 'url(#' + id + 'k)', 'class': 'gv-sw gv-sw-d' }, svg);
       txt(svg, hx2 + sw + 8, hy, 'Decline', 'gv-lbl');
 
       // rows
@@ -248,7 +290,7 @@
       stop(gM, '0', '#ffffff', '1'); stop(gM, '1', '#ffffff', '0');
       var sm = mk('mask', { id: id + 'sm', maskUnits: 'userSpaceOnUse', x: 0, y: f(yB - ph - 2), width: W, height: f(ph + 4) }, d);
       mk('rect', { x: 0, y: f(yB - ph), width: W, height: f(ph), fill: 'url(#' + id + 'mg)' }, sm);
-      S.shA = mk('path', { fill: 'url(#' + id + 's)', opacity: 0, mask: 'url(#' + id + 'sm)' }, R.g);
+      S.shA = mk('path', { fill: 'url(#' + id + 's)', opacity: 0, mask: 'url(#' + id + 'sm)', 'class': 'gv-shim' }, R.g);
       S.halo = mk('circle', { r: 8, 'class': 'gv-halo', opacity: 0 }, R.g);
       S.head = mk('circle', { r: 3.2, 'class': 'gv-head', opacity: 0 }, R.g);
     }
@@ -261,10 +303,10 @@
       mk('path', { d: 'M' + S.x0 + ' ' + px(yb) + 'H' + P.x1, 'class': 'gv-base' }, g);
       o.ticksOff = mk('path', { 'class': 'gv-tick' }, g);
       o.ticksOn = mk('path', { 'class': 'gv-tick gv-tick-on' }, g);
-      o.da = mk('path', { fill: 'url(#' + id + 'd)' }, g);
+      o.da = mk('path', { fill: 'url(#' + id + 'd)', 'class': 'gv-da' }, g);
       o.dl = mk('path', { stroke: 'url(#' + id + 'dl)', 'class': 'gv-line' }, g);
-      o.ha = mk('path', { fill: 'url(#' + id + 'h)', filter: S.shadow }, g);
-      o.hv = mk('path', { fill: 'url(#' + id + 'v)' }, g);
+      o.ha = mk('path', { fill: 'url(#' + id + 'h)', filter: S.shadow, 'class': 'gv-ha' }, g);
+      o.hv = mk('path', { fill: 'url(#' + id + 'v)', 'class': 'gv-hv' }, g);
       o.hl = mk('path', { 'class': 'gv-line gv-line-h' }, g);
       return o;
     }
@@ -356,7 +398,8 @@
       }
     }
 
-    return { kind: 'lifespan', build: build, draw: draw };
+    // the paused still before any intro has run: both spans grown, no shimmer yet
+    return { kind: 'lifespan', build: build, draw: draw, still: T_SH };
   }
 
   /* =========================================================
@@ -405,6 +448,17 @@
     tabs.setAttribute('aria-label', 'Phases');
     box.id = id + 'panel';
     box.setAttribute('role', 'tabpanel');
+    // the panel's content for assistive tech: the figure itself, described by the
+    // mount's own label (kept on the group as well, so the tabs keep their context)
+    var lbl = el.getAttribute('aria-label');
+    if (lbl) {
+      var fig = document.createElement('div');
+      fig.className = 'gv-fig';
+      fig.setAttribute('role', 'img');
+      fig.setAttribute('aria-label', lbl);
+      box.insertBefore(fig, svg);
+      fig.appendChild(svg);
+    }
     S.tabs = [];
     PH.forEach(function (name, i) {
       var b = document.createElement('button');
@@ -472,11 +526,20 @@
       // once the form has started to change in Shape, the next cycle continues from the new form
       if (lt > D_M + D_R + 1.0) c += 1;
       var start = c * CYC + PH_START[p];
-      S.from = S.last ? { q: S.last, t0: self.t } : null;
       // a jump straight to Shape skips Repair, so there is no healed seam to carry over
       S.noSeam = p === 2;
-      S.off = start - self.t;
       S.hold = { end: start + PH_DUR[p] - 0.001, until: self.t + HOLD };
+      if (paused()) {
+        // animations paused: no blend; show the phase's telling still at once
+        // (steady / damaged and healing / mid-reshape), and play on from it on resume
+        S.from = null;
+        if (self.t < self.still) self.t = self.still;
+        S.off = c * CYC + PH_STILL[p] - self.t;
+        S.hold.until = self.t + HOLD;
+      } else {
+        S.from = S.last ? { q: S.last, t0: self.t } : null;
+        S.off = start - self.t;
+      }
       self.draw();
       kick();
     }
@@ -504,7 +567,7 @@
       var fl = mk('filter', { id: id + 'sh', x: '-20%', y: '-20%', width: '140%', height: '150%' }, d);
       mk('feDropShadow', { dx: 0, dy: 4, stdDeviation: 5, 'flood-color': '#c2410c', 'flood-opacity': '.14' }, fl);
 
-      S.fill = mk('path', { fill: 'url(#' + id + 'in)', filter: 'url(#' + id + 'sh)' }, svg);
+      S.fill = mk('path', { fill: 'url(#' + id + 'in)', filter: 'url(#' + id + 'sh)', 'class': 'gv-body' }, svg);
       S.ghost = mk('path', { 'class': 'gv-ghost' }, svg);
       S.ghostN = mk('path', { 'class': 'gv-ghost gv-ghost-n', opacity: 0 }, svg);
       S.in2 = mk('path', { 'class': 'gv-inner', opacity: 0.3 }, svg);
@@ -663,24 +726,28 @@
       S.tabs[phase].style.setProperty('--p', reduce ? '1' : f(pp));
     }
 
-    self = { kind: 'morphology', build: build, draw: draw, reset: function () { S.off = 0; S.hold = null; S.from = null; } };
+    // still: the entrance has finished, early in Maintain
+    self = { kind: 'morphology', build: build, draw: draw, still: 0.6, reset: function () { S.off = 0; S.hold = null; S.from = null; } };
     return self;
   }
 
   /* ---------- boot ---------- */
   function init() {
+    wasPaused = paused();
     var a = document.querySelectorAll('[data-widget="lifespan"]');
     var b = document.querySelectorAll('[data-widget="morphology"]');
     for (var i = 0; i < a.length; i++) mount(a[i], lifespan);
     for (var j = 0; j < b.length; j++) mount(b[j], morphology);
     document.addEventListener('visibilitychange', kick);
     document.addEventListener('site:unlocked', function () { setTimeout(kick, 30); });
+    document.addEventListener('site:motion', function () { syncPause(); kick(); });
     if ('MutationObserver' in window) {
-      new MutationObserver(kick).observe(root, { attributes: true, attributeFilter: ['class'] });
+      new MutationObserver(function () { syncPause(); kick(); }).observe(root, { attributes: true, attributeFilter: ['class'] });
     }
     if (mq) {
       var onMq = function () {
         reduce = mq.matches;
+        if (!reduce && wasPaused) widgets.forEach(freeze);
         widgets.forEach(function (w) { w.draw(); });
         kick();
       };
@@ -693,7 +760,7 @@
       times: function () { return widgets.map(function (w) { return w.t; }); },
       state: function () {
         return { running: !!raf, widgets: widgets.map(function (w) {
-          return { kind: w.kind, t: w.t, visible: w.visible, ratio: w.ratio, started: w.started, ready: w.ready, delay: w.delay };
+          return { kind: w.kind, t: w.t, visible: w.visible, ratio: w.ratio, started: w.started, ready: w.ready, delay: w.delay, pre: !!w.pre };
         }) };
       }
     };

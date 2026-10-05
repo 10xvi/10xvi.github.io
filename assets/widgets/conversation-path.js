@@ -10,6 +10,10 @@
   var mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   function reduced() { return !!(mq && mq.matches); }
   function locked() { return root.classList.contains('gate-locked'); }
+  /* the site-wide "Pause animations" control (html.motion-paused + the site:motion event) */
+  function paused() { return root.classList.contains('motion-paused'); }
+  var fcq = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+  var FC = false; // forced colours: labels and essential strokes in system colours, no fills, glows or shadows
 
   /* ---------- helpers ---------- */
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -29,8 +33,18 @@
     return fb;
   }
   var COL = {};
+  /* resolve a system colour (CanvasText, Highlight...) to rgb through a probe that is not itself forced */
+  function sysColor(name, fb) {
+    var p = doc.createElement('i');
+    p.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;forced-color-adjust:none;color:' + name;
+    (doc.body || root).appendChild(p);
+    var c = parseColor(getComputedStyle(p).color, fb);
+    p.parentNode.removeChild(p);
+    return c;
+  }
   function readColors() {
     var cs = getComputedStyle(root);
+    FC = !!(fcq && fcq.matches);
     COL.orange = parseColor(cs.getPropertyValue('--orange'), [249, 115, 22]);
     COL.amber = parseColor(cs.getPropertyValue('--amber'), [245, 158, 11]);
     COL.sky = parseColor(cs.getPropertyValue('--sky'), [14, 165, 233]);
@@ -47,8 +61,22 @@
     COL.orangeInk = parseColor(cs.getPropertyValue('--orange-ink'), [194, 65, 12]);
     COL.skyInk = parseColor(cs.getPropertyValue('--sky-ink'), [3, 105, 161]);
     COL.white = [255, 255, 255];
+    if (FC) {
+      var ink = sysColor('CanvasText', [255, 255, 255]), cv = sysColor('Canvas', [0, 0, 0]),
+        gray = sysColor('GrayText', [128, 128, 128]), hi = sysColor('Highlight', [26, 235, 255]);
+      COL.head = COL.text = COL.muted = COL.orangeInk = COL.skyInk = ink;
+      COL.line = COL.line2 = gray;
+      COL.orange = COL.amber = COL.sky = COL.skyDeep = hi;
+      COL.white = COL.bg = COL.orangeSoft = COL.skySoft = cv;
+    }
+    // the glow sprites follow the palette
+    for (var k in glowCache) glowCache[k].width = glowCache[k].height = 0;
+    glowCache = {};
   }
+  /* the paper colour of discs, pills and faces (Canvas under forced colours, never an opaque white disc) */
+  function paper(a) { return rgba(COL.white, a == null ? 1 : a); }
   function softShadow(ctx, blur, dy, a) {
+    if (FC) return;
     ctx.shadowColor = 'rgba(15,23,42,' + a + ')'; ctx.shadowBlur = blur; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = dy;
   }
   function noShadow(ctx) { ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; }
@@ -87,34 +115,41 @@
     ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
     ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
   }
-  /* soft glow: one cached radial sprite per colour, blitted with globalAlpha (no per-frame gradient) */
-  var glowCache = {}, glowCount = 0;
+  /* soft glow: one cached radial sprite per palette colour, blitted with globalAlpha (no per-frame
+     gradient). Only palette colours reach here (orange, amber, sky and the rooms' orange-amber), and
+     they are baked ahead of the first frame (warmGlows), so nothing is allocated while animating. */
+  var glowCache = {};
   function glowSprite(col) {
-    // colours are quantised so tints that drift with distance reuse a small, bounded set of sprites
-    col = col.map(function (v) { return Math.min(255, Math.round(v / 6) * 6); });
     var key = col.join(',');
     if (glowCache[key]) return glowCache[key];
-    if (++glowCount > 64) { glowCache = {}; glowCount = 1; }
     var c = doc.createElement('canvas'), S = 128; c.width = c.height = S;
     var x = c.getContext('2d'), g = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
     g.addColorStop(0, rgba(col, 1)); g.addColorStop(0.3, rgba(col, 0.62)); g.addColorStop(0.62, rgba(col, 0.2)); g.addColorStop(1, rgba(col, 0));
     x.fillStyle = g; x.fillRect(0, 0, S, S);
     return (glowCache[key] = c);
   }
+  function warmGlows() {
+    if (FC) return;
+    [COL.orange, COL.amber, COL.sky, roomCol()].forEach(glowSprite);
+  }
+  function roomCol() { return mix(COL.orange, COL.amber, 0.25); }
   function glowDot(ctx, x, y, r, col, a) {
-    if (a <= 0.003) return;
+    if (FC || a <= 0.003) return;
     var ga = ctx.globalAlpha;
     ctx.globalAlpha = ga * clamp(a, 0, 1);
     ctx.drawImage(glowSprite(col), x - r, y - r, 2 * r, 2 * r);
     ctx.globalAlpha = ga;
   }
-  /* offscreen layers at the host's backing size; drawn 1:1 in device pixels */
-  function makeLayer(h, w, hh, ox, oy) {
-    var c = doc.createElement('canvas');
-    var dpr = h.dpr;
+  /* offscreen layers at the host's backing size; drawn 1:1 in device pixels.
+     Pooled by key: a re-bake reuses the same canvases, and Host.bake frees the ones it no longer uses. */
+  function makeLayer(h, key, w, hh, ox, oy) {
+    var c = h.pool[key], dpr = h.dpr;
     w = w == null ? h.w : w; hh = hh == null ? h.h : hh; ox = ox || 0; oy = oy || 0;
-    c.width = Math.max(1, Math.ceil(w * dpr)); c.height = Math.max(1, Math.ceil(hh * dpr));
-    var x = c.getContext('2d');
+    var cw = Math.max(1, Math.ceil(w * dpr)), ch = Math.max(1, Math.ceil(hh * dpr)), x;
+    if (!c) { c = h.pool[key] = doc.createElement('canvas'); h.allocs++; }
+    h.used[key] = true;
+    if (c.width === cw && c.height === ch && c.__ctx && c.__ctx.reset) { x = c.__ctx; x.reset(); }
+    else { c.width = cw; c.height = ch; x = c.__ctx = c.getContext('2d'); } // resizing also clears and resets it
     x.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
     return { c: c, ctx: x, ox: ox, oy: oy, w: c.width / dpr, h: c.height / dpr };
   }
@@ -135,9 +170,9 @@
     ctx.restore();
   }
   /* a sprite whose top-left sits on a whole device pixel, so baked text stays crisp */
-  function makeSprite(h, x0, y0, x1, y1) {
+  function makeSprite(h, key, x0, y0, x1, y1) {
     var d = h.dpr, ox = Math.floor(x0 * d) / d, oy = Math.floor(y0 * d) / d;
-    return makeLayer(h, x1 - ox, y1 - oy, ox, oy);
+    return makeLayer(h, key, x1 - ox, y1 - oy, ox, oy);
   }
 
   /* ---------- widget host: canvas, sizing, visibility, shared loop ---------- */
@@ -145,6 +180,7 @@
   function Host(mount, impl) {
     this.mount = mount; this.impl = impl; this.st = {};
     this.w = 0; this.h = 0; this.dpr = 1; this.visible = false; this.leftAt = 0;
+    this.pool = {}; this.used = {}; this.allocs = 0; this.bakes = 0; this.dirty = true; this.baked = false;
     var stage = doc.createElement('div'); stage.className = 'cpw-stage';
     var cv = doc.createElement('canvas'); cv.className = 'cpw-canvas'; cv.setAttribute('aria-hidden', 'true');
     stage.appendChild(cv);
@@ -153,22 +189,42 @@
     if (impl.decorate) impl.decorate(this);
     impl.init(this);
   }
-  Host.prototype.bake = function () { if (this.w && this.impl.bake) this.impl.bake(this); };
+  /* one bake per real change: layers are re-baked only when dirty, unlocked and in view */
+  Host.prototype.bake = function () {
+    this.used = {};
+    warmGlows();
+    this.impl.bake(this);
+    for (var k in this.pool) if (!this.used[k]) { var c = this.pool[k]; c.width = c.height = 0; delete this.pool[k]; }
+    this.dirty = false; this.baked = true; this.bakes++; this.bakedFonts = fontsOK();
+  };
+  Host.prototype.relayout = function () {
+    if (!this.w) return;
+    this.impl.layout(this);
+    if (reduced()) this.impl.still(this);
+    this.dirty = true;
+  };
   Host.prototype.resize = function (force) {
     var r = this.stage.getBoundingClientRect();
     var w = Math.round(r.width), h = Math.round(r.height);
+    if (this.impl.stageHeight && !CQ) {
+      // no container queries: the stage height follows the layout the script picks for this width
+      var want = this.impl.stageHeight(w);
+      if (want && Math.abs(want - h) > 0.5) { this.stage.style.height = want + 'px'; h = want; }
+    }
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     if (w < 4 || h < 4) return false;
     if (!force && w === this.w && h === this.h && dpr === this.dpr) return false;
     this.w = w; this.h = h; this.dpr = dpr;
     this.cv.width = Math.round(w * dpr); this.cv.height = Math.round(h * dpr);
-    this.impl.layout(this);
-    this.bake();
-    if (reduced()) this.impl.still(this);
+    this.relayout();
     return true;
   };
   Host.prototype.render = function () {
     if (!this.w) return;
+    if (this.dirty) {
+      if (locked() || !this.visible) return; // baked on first view, never under the gate
+      this.bake();
+    }
     var ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
@@ -177,7 +233,7 @@
 
   var raf = 0, last = 0;
   function wantRun() {
-    if (reduced() || locked() || doc.hidden) return false;
+    if (reduced() || locked() || paused() || doc.hidden) return false;
     for (var i = 0; i < widgets.length; i++) if (widgets[i].visible && widgets[i].w) return true;
     return false;
   }
@@ -196,6 +252,17 @@
   }
   function renderAll(force) {
     widgets.forEach(function (h) { h.resize(force); h.render(); });
+  }
+  /* coalesce re-bakes (fonts, colour scheme) into one frame */
+  var flushQ = 0;
+  function flush() {
+    if (flushQ) return;
+    flushQ = requestAnimationFrame(function () { flushQ = 0; renderAll(false); });
+  }
+  var CQ = !!(window.CSS && CSS.supports && CSS.supports('container-type', 'inline-size'));
+  function fontsOK() {
+    try { return !doc.fonts || !doc.fonts.check || (doc.fonts.check('500 12px "JetBrains Mono"') && doc.fonts.check('600 15px "Space Grotesk"')); }
+    catch (e) { return true; }
   }
 
   /* =====================================================================
@@ -249,6 +316,8 @@
   }
 
   var Conversation = {
+    // the stacked phone layout needs a taller stage (CSS does this with @container where supported)
+    stageHeight: function (w) { return w < 440 ? 460 : w >= 760 ? 228 : 224; },
     decorate: function (h) {
       var cap = doc.createElement('div');
       cap.className = 'cpw-caption';
@@ -318,7 +387,7 @@
       var st = h.st, A = st.A, B = st.B, R = st.R, sky = COL.sky, orange = COL.orange, amber = COL.amber, i, k, ctx;
       var l0 = st.lanes[0], l1 = st.lanes[1];
       // field, at the strongest attunement; drawn with a lower alpha per frame
-      var F = makeLayer(h); ctx = F.ctx;
+      var F = makeLayer(h, 'F'); ctx = F.ctx;
       var fieldA = 0.085, fe = st.mode === 'h' ? 0.07 : 0.1;
       var g = ctx.createLinearGradient(A.x, A.y, B.x, B.y);
       g.addColorStop(0, rgba(amber, 0)); g.addColorStop(fe, rgba(amber, 0)); g.addColorStop(fe + 0.14, rgba(amber, fieldA)); g.addColorStop(0.5, rgba(COL.line, 0.3));
@@ -327,16 +396,18 @@
       ctx.beginPath(); ctx.moveTo(l0.X[0], l0.Y[0]);
       for (i = 4; i <= l0.n; i += 4) ctx.lineTo(l0.X[i], l0.Y[i]);
       for (i = 0; i <= l1.n; i += 4) ctx.lineTo(l1.X[i], l1.Y[i]);
-      ctx.closePath(); ctx.fill();
+      ctx.closePath();
+      if (!FC) ctx.fill(); // forced colours: no decorative ground
       st.fieldLayer = F;
       // tracks: a solid tinted hairline per lane, faded at both ends, with a clear arrowhead
-      var T = makeLayer(h); ctx = T.ctx;
+      var T = makeLayer(h, 'T'); ctx = T.ctx;
+      var ta = FC ? 0.9 : 0.3;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       for (k = 0; k < 2; k++) {
         var ln = st.lanes[k], col = k === 0 ? sky : orange;
         var tg = ctx.createLinearGradient(ln.X[0], ln.Y[0], ln.X[ln.n], ln.Y[ln.n]);
         var f0 = Math.min(0.2, 30 / ln.len);
-        tg.addColorStop(0, rgba(col, 0)); tg.addColorStop(f0, rgba(col, 0.3)); tg.addColorStop(1 - f0 * 0.5, rgba(col, 0.32)); tg.addColorStop(1, rgba(col, 0.32));
+        tg.addColorStop(0, rgba(col, 0)); tg.addColorStop(f0, rgba(col, ta)); tg.addColorStop(1 - f0 * 0.5, rgba(col, ta + 0.02)); tg.addColorStop(1, rgba(col, ta + 0.02));
         ctx.lineWidth = 1.25; ctx.strokeStyle = tg;
         ctx.beginPath(); ctx.moveTo(ln.X[0], ln.Y[0]);
         for (i = 3; i <= ln.n; i += 3) ctx.lineTo(ln.X[i], ln.Y[i]);
@@ -346,13 +417,13 @@
       }
       st.trackLayer = T;
       // node shadows: baked once, blitted under the live shapes (no per-frame blur)
-      function shadowSprite(shape, dy) {
-        var pad = 30, sp = makeSprite(h, -R - pad, -R - pad, R + pad, R + pad), c2 = sp.ctx;
-        shape(c2); softShadow(c2, 14, dy, 0.1); c2.fillStyle = '#fff'; c2.fill(); noShadow(c2);
+      function shadowSprite(key, shape, dy) {
+        var pad = 30, sp = makeSprite(h, key, -R - pad, -R - pad, R + pad, R + pad), c2 = sp.ctx;
+        shape(c2); softShadow(c2, 14, dy, 0.1); c2.fillStyle = paper(); c2.fill(); noShadow(c2);
         return sp;
       }
-      st.bodyShadow = shadowSprite(function (c2) { c2.beginPath(); c2.arc(0, 0, R * 0.93, 0, TAU); }, 4);
-      st.intelShadow = shadowSprite(function (c2) {
+      st.bodyShadow = shadowSprite('bodySh', function (c2) { c2.beginPath(); c2.arc(0, 0, R * 0.93, 0, TAU); }, 4);
+      st.intelShadow = shadowSprite('intelSh', function (c2) {
         c2.beginPath();
         for (var q = 0; q <= 6; q++) { var a = -Math.PI / 2 + q * TAU / 6, rr = R * 0.97; if (q) c2.lineTo(rr * Math.cos(a), rr * Math.sin(a)); else c2.moveTo(rr * Math.cos(a), rr * Math.sin(a)); }
         c2.closePath();
@@ -369,10 +440,10 @@
         var col = lane === 0 ? COL.sky : COL.orange, ink = lane === 0 ? COL.skyInk : COL.orangeInk;
         var m = h.ctx; m.font = '500 11px ' + MONO;
         var ls = 1.4, tw = spacedWidth(m, text, ls), pw = Math.round(tw + 26), ph = 24, pad = 14;
-        var sp = makeSprite(h, -pw / 2 - pad, -ph / 2 - pad, pw / 2 + pad, ph / 2 + pad), c2 = sp.ctx;
+        var sp = makeSprite(h, 'tag' + lane + text, -pw / 2 - pad, -ph / 2 - pad, pw / 2 + pad, ph / 2 + pad), c2 = sp.ctx;
         c2.font = '500 11px ' + MONO;
         roundRect(c2, -pw / 2, -ph / 2, pw, ph, ph / 2);
-        softShadow(c2, 10, 3, 0.1); c2.fillStyle = '#fff'; c2.fill(); noShadow(c2);
+        softShadow(c2, 10, 3, 0.1); c2.fillStyle = paper(); c2.fill(); noShadow(c2);
         c2.lineWidth = 1; c2.strokeStyle = rgba(mix(COL.line, col, 0.22), 1); c2.stroke();
         c2.fillStyle = rgba(col, 1); c2.beginPath(); c2.arc(-pw / 2 + 11, 0, 2.5, 0, TAU); c2.fill();
         c2.fillStyle = rgba(ink, 1); c2.textBaseline = 'middle';
@@ -426,7 +497,6 @@
       var beat = TAU * t / 5.2;
       var bodyBreath = Math.sin(beat - (1 - att) * 1.9);
       var intelBreath = Math.sin(beat);
-      if (!st.fieldLayer) this.bake(h);
 
       // soft field between the lanes (baked at full strength, faded in as the two attune)
       blitLayer(h, ctx, st.fieldLayer, (0.045 + 0.04 * att) / 0.085);
@@ -513,7 +583,7 @@
         var fade = smooth(0, 24, hp) * smooth(L, L - 20, hp);
         glowDot(ctx, head.x, head.y, 10, col, 0.22 * fade);
         ctx.globalAlpha = fade;
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(head.x, head.y, 3, 0, TAU); ctx.fill();
+        ctx.fillStyle = paper(); ctx.beginPath(); ctx.arc(head.x, head.y, 3, 0, TAU); ctx.fill();
         ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(col, 1); ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -573,8 +643,8 @@
       // outer membrane: white body with a soft shadow, then a warm wash
       blitAt(this.h, ctx, st.bodyShadow, x, y);
       trace(paths[0]);
-      ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.fillStyle = this.wash(st, 'b', x, y, R, COL.orangeSoft, amber, 0.16 + 0.06 * att); ctx.fill();
+      ctx.fillStyle = paper(); ctx.fill();
+      if (!FC) { ctx.fillStyle = this.wash(st, 'b', x, y, R, COL.orangeSoft, amber, 0.16 + 0.06 * att); ctx.fill(); }
       for (k = 0; k < rings; k++) {
         trace(paths[k]);
         if (k === rings - 1) {
@@ -585,7 +655,7 @@
         ctx.stroke();
       }
       // highlight on the core
-      ctx.fillStyle = 'rgba(255,255,255,' + (0.75 + 0.2 * hit) + ')';
+      ctx.fillStyle = paper(0.75 + 0.2 * hit);
       ctx.beginPath(); ctx.arc(x - R * 0.08, y - R * 0.08, 2.4, 0, TAU); ctx.fill();
     },
     drawIntel: function (ctx, x, y, R, t, att, breath, st) {
@@ -610,8 +680,8 @@
       ctx.drawImage(sh.c, sh.ox, sh.oy, sh.w, sh.h);
       ctx.restore();
       hex(V);
-      ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.fillStyle = this.wash(st, 'i', x, y, R, COL.skySoft, sky, 0.14 + 0.06 * att); ctx.fill();
+      ctx.fillStyle = paper(); ctx.fill();
+      if (!FC) { ctx.fillStyle = this.wash(st, 'i', x, y, R, COL.skySoft, sky, 0.14 + 0.06 * att); ctx.fill(); }
       // learned structure: chords appear as the two become attuned
       var nCh = Math.round(clamp((att - 0.1) / 0.8, 0, 1) * 6);
       ctx.lineWidth = 1;
@@ -702,7 +772,7 @@
       if (k === st.stage) return;
       st.stage = k;
       st.emFrom = st.em.slice(); st.inkFrom = st.ink.slice(); st.emT = 0;
-      if (reduced() || locked() || doc.hidden || !h.visible || !h.w) {
+      if (reduced() || locked() || paused() || doc.hidden || !h.visible || !h.w) {
         st.em = STAGE_EM[k].slice(); st.ink = STAGE_INK[k].slice(); st.emT = 1;
         if (reduced() && st.nodes) this.still(h);
         h.render();
@@ -736,6 +806,16 @@
       while (st.homeFs > 12 && ctx.measureText('The Home').width > st.rh * 1.62) { st.homeFs--; ctx.font = '600 ' + st.homeFs + 'px ' + DISP; }
       ctx.font = '500 ' + st.fs + 'px ' + MONO;
       st.boxes = [];
+      // narrow figures: if either lower corner label would have to wrap, both lower labels sit centred
+      // under their nodes on one shared baseline instead (no two-line label beside a one-line one)
+      var under = false;
+      if (st.narrow) PATH_NODES.forEach(function (nd) {
+        var a = nd.ang * Math.PI / 180;
+        if (nd.ring !== 2 || Math.sin(a) <= 0) return;
+        var x = cx + st.r2 * Math.cos(a), ax = x + Math.cos(a) * 15;
+        var avail = Math.cos(a) > 0 ? W - pad - ax : ax - pad;
+        if (spacedWidth(ctx, nd.t.toUpperCase(), st.ls) > avail) under = true;
+      });
       st.nodes = PATH_NODES.map(function (nd) {
         var r = nd.ring === 1 ? st.r1 : st.r2, a = nd.ang * Math.PI / 180;
         var x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
@@ -743,7 +823,16 @@
         var tw = spacedWidth(ctx, lines[0], st.ls);
         var nr = nd.ring === 1 ? 6 : 5;
         var lx, ly, box, align = 'center', bh;
-        if (st.narrow && nd.ring === 2) {
+        if (under && nd.ring === 2 && Math.sin(a) > 0) {
+          if (tw > W / 2 - 12 && lines[0].indexOf(' ') > 0) {
+            lines = lines[0].split(' ');
+            tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
+          }
+          bh = st.lh * (lines.length - 1);
+          lx = clamp(x, 8 + tw / 2, W - 8 - tw / 2);
+          ly = y + nr + 14;
+          box = [lx - tw / 2 - 5, ly - st.fs * 0.78 - 4, lx + tw / 2 + 5, ly + bh + st.fs * 0.22 + 4];
+        } else if (st.narrow && nd.ring === 2) {
           // corner label: anchored on the diagonal 10px past the node, clear of the tick band,
           // left-aligned on the right side and right-aligned on the left side
           var right = Math.cos(a) > 0, up = Math.sin(a) < 0;
@@ -828,7 +917,14 @@
         if (st.t > r.t0 + r.dur) { st.returns.splice(i, 1); st.home = Math.max(st.home, 0.75); }
       }
     },
-    nodeCol: function (n) { return n.ring === 1 ? mix(COL.orange, COL.amber, 0.25) : COL.sky; },
+    nodeCol: function (n) { return n.ring === 1 ? roomCol() : COL.sky; },
+    // the glow under a tinted point: its palette colour at the alpha of its share of the tint
+    // (the white share adds nothing on the light ground), so only palette sprites are ever used
+    tintGlow: function (ctx, st, x, y, r, dist, a) {
+      var u = smooth(st.r1 + 6, st.r1 + (st.r2 - st.r1) * 0.55, dist);
+      if (u < 0.5) glowDot(ctx, x, y, r, COL.orange, a * (1 - u * 1.2));
+      else glowDot(ctx, x, y, r, COL.sky, a * (1 - (1 - u) * 1.2));
+    },
     // static parts are baked once per layout: base (ground, rings, ticks, spokes) and top (discs, home, labels)
     bake: function (h) {
       var st = h.st, cx = st.cx, cy = st.cy, sky = COL.sky, orange = COL.orange, i, n, ctx;
@@ -836,11 +932,13 @@
       // each group is baked on its own layer so the stage being read can be brought forward:
       // the wider settings (full size), the two rooms and the home (cropped around the centre)
       var rr = st.r1 + 26;
-      var baseOuter = makeLayer(h), baseRooms = makeSprite(h, cx - rr, cy - rr, cx + rr, cy + rr);
+      var baseOuter = makeLayer(h, 'baseOuter'), baseRooms = makeSprite(h, 'baseRooms', cx - rr, cy - rr, cx + rr, cy + rr);
       ctx = baseOuter.ctx;
-      var g0 = ctx.createRadialGradient(cx, cy, st.rh, cx, cy, st.r2 + 14);
-      g0.addColorStop(0, rgba(sky, 0.02)); g0.addColorStop(0.75, rgba(sky, 0.055)); g0.addColorStop(1, rgba(sky, 0.0));
-      ctx.fillStyle = g0; ctx.beginPath(); ctx.arc(cx, cy, st.r2 + 14, 0, TAU); ctx.fill();
+      if (!FC) { // forced colours: no ground washes
+        var g0 = ctx.createRadialGradient(cx, cy, st.rh, cx, cy, st.r2 + 14);
+        g0.addColorStop(0, rgba(sky, 0.02)); g0.addColorStop(0.75, rgba(sky, 0.055)); g0.addColorStop(1, rgba(sky, 0.0));
+        ctx.fillStyle = g0; ctx.beginPath(); ctx.arc(cx, cy, st.r2 + 14, 0, TAU); ctx.fill();
+      }
       maskedCircle(ctx, cx, cy, st.r2, boxes);
       ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
       ctx.strokeStyle = rgba(COL.line2, 0.8); ctx.lineWidth = 1; ctx.beginPath();
@@ -852,9 +950,11 @@
       }
       ctx.stroke();
       ctx = baseRooms.ctx;
-      var g1 = ctx.createRadialGradient(cx, cy, st.rh * 0.8, cx, cy, st.r1 + 8);
-      g1.addColorStop(0, rgba(COL.amber, 0.1)); g1.addColorStop(0.85, rgba(COL.amber, 0.05)); g1.addColorStop(1, rgba(COL.amber, 0));
-      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(cx, cy, st.r1 + 8, 0, TAU); ctx.fill();
+      if (!FC) {
+        var g1 = ctx.createRadialGradient(cx, cy, st.rh * 0.8, cx, cy, st.r1 + 8);
+        g1.addColorStop(0, rgba(COL.amber, 0.1)); g1.addColorStop(0.85, rgba(COL.amber, 0.05)); g1.addColorStop(1, rgba(COL.amber, 0));
+        ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(cx, cy, st.r1 + 8, 0, TAU); ctx.fill();
+      }
       maskedCircle(ctx, cx, cy, st.r1, boxes);
       ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
       [baseRooms.ctx, baseOuter.ctx].forEach(function (c2) { c2.setLineDash([2, 4]); c2.lineWidth = 1; c2.strokeStyle = rgba(COL.muted, 0.5); });
@@ -869,7 +969,7 @@
       baseRooms.ctx.setLineDash([]); baseOuter.ctx.setLineDash([]);
       st.baseOuter = baseOuter; st.baseRooms = baseRooms;
 
-      var topOuter = makeLayer(h), topRooms = makeSprite(h, cx - rr, cy - rr, cx + rr, cy + rr);
+      var topOuter = makeLayer(h, 'topOuter'), topRooms = makeSprite(h, 'topRooms', cx - rr, cy - rr, cx + rr, cy + rr);
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
         ctx = n.ring === 1 ? topRooms.ctx : topOuter.ctx;
@@ -885,14 +985,16 @@
         ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
       }
       st.topOuter = topOuter; st.topRooms = topRooms;
-      var hr = st.rh + 34, home = makeSprite(h, cx - hr, cy - hr, cx + hr, cy + hr); ctx = home.ctx;
+      var hr = st.rh + 34, home = makeSprite(h, 'home', cx - hr, cy - hr, cx + hr, cy + hr); ctx = home.ctx;
       ctx.beginPath(); ctx.arc(cx, cy, st.rh, 0, TAU);
       softShadow(ctx, 18, 6, 0.12);
-      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.fillStyle = paper(); ctx.fill();
       noShadow(ctx);
-      var hg = ctx.createRadialGradient(cx, cy - st.rh * 0.4, st.rh * 0.1, cx, cy, st.rh);
-      hg.addColorStop(0, rgba(COL.orangeSoft, 1)); hg.addColorStop(1, rgba(COL.amber, 0.24));
-      ctx.fillStyle = hg; ctx.fill();
+      if (!FC) {
+        var hg = ctx.createRadialGradient(cx, cy - st.rh * 0.4, st.rh * 0.1, cx, cy, st.rh);
+        hg.addColorStop(0, rgba(COL.orangeSoft, 1)); hg.addColorStop(1, rgba(COL.amber, 0.24));
+        ctx.fillStyle = hg; ctx.fill();
+      }
       var hs = ctx.createLinearGradient(cx - st.rh, cy - st.rh, cx + st.rh, cy + st.rh);
       hs.addColorStop(0, rgba(COL.amber, 1)); hs.addColorStop(1, rgba(orange, 1));
       ctx.lineWidth = 2; ctx.strokeStyle = hs; ctx.stroke();
@@ -904,11 +1006,12 @@
       ctx.fillText('The Home', cx, cy + st.homeFs * 0.42);
       st.homeLayer = home;
 
-      // each label baked twice, slate and ink; lit labels cross-fade by alpha, never by channel mixing
+      // each label baked twice, slate and ink; lit labels cross-fade by alpha, never by channel mixing.
+      // The held-back copy is a darker slate (--text, slate-600), so it stays AA even when its group is quiet.
       st.labelSprites = st.nodes.map(function (nd, k) {
         var b = boxes[k], out = [];
-        [COL.muted, nd.ring === 1 ? COL.orangeInk : COL.skyInk].forEach(function (col) {
-          var sp = makeSprite(h, b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2), c2 = sp.ctx;
+        [COL.text, nd.ring === 1 ? COL.orangeInk : COL.skyInk].forEach(function (col, v) {
+          var sp = makeSprite(h, 'lbl' + k + '_' + v, b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2), c2 = sp.ctx;
           c2.font = '500 ' + st.fs + 'px ' + MONO; c2.textBaseline = 'alphabetic';
           c2.fillStyle = rgba(col, 1);
           for (var li = 0; li < nd.lines.length; li++) fillSpaced(c2, nd.lines[li], nd.lx, nd.ly + li * st.lh, st.ls, nd.align);
@@ -919,8 +1022,9 @@
     },
     draw: function (h, ctx) {
       var st = h.st, cx = st.cx, cy = st.cy, orange = COL.orange, i, n;
-      if (!st.baseOuter) this.bake(h);
       var em = st.em;
+      // forced colours: the held-back groups stay clearly drawn (the stage list carries the emphasis too)
+      if (FC) em = em.map(function (e) { return 0.6 + 0.4 * e; });
       var tc = st.stillFront ? 2.15 : st.t - Math.floor(st.t / PERIOD) * PERIOD;
       var rho = this.front(st, tc);
 
@@ -977,9 +1081,9 @@
         var e = easeInOut(u), dist = lerp(n.r - n.nr - 6, st.rh + 6, e);
         var px = cx + Math.cos(n.a) * dist, py = cy + Math.sin(n.a) * dist;
         var ra = Math.sin(Math.PI * u) * this.zoneEm(st, dist), rc = this.tint(st, dist);
-        glowDot(ctx, px, py, 9, rc, 0.22 * ra);
+        this.tintGlow(ctx, st, px, py, 9, dist, 0.22 * ra);
         ctx.globalAlpha = ra;
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px, py, 2.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = paper(); ctx.beginPath(); ctx.arc(px, py, 2.6, 0, TAU); ctx.fill();
         ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(rc, 1); ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -1015,11 +1119,14 @@
           ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
         }
         ctx.globalAlpha = 1;
-        // the active stage's labels hold their ink colour; the rest light up as the pulse passes
-        // (held-back labels keep a readable floor)
-        var k = Math.max(smooth(0.22, 0.68, lit), st.ink[n.ring]), sp = st.labelSprites[i], la = 0.3 + 0.7 * ge;
-        if (k < 0.995) blitLayer(h, ctx, sp[0], (1 - k) * la);
-        if (k > 0.005) blitLayer(h, ctx, sp[1], k * la);
+        // the active stage's labels hold their ink colour; the rest light up as the pulse passes.
+        // Text is not held back with the drawing: its floor (slate-600 at .82 on the ground) is about 4.7:1.
+        var k = Math.max(smooth(0.22, 0.68, lit), st.ink[n.ring]), sp = st.labelSprites[i], la = 0.82 + 0.18 * ge;
+        // the ink copy goes over the slate one; the slate's alpha is solved so the pair always covers
+        // exactly la (two half-alpha copies would wash the label out mid-fade)
+        var a1 = k > 0.005 ? k * la : 0;
+        if (k < 0.995) blitLayer(h, ctx, sp[0], la * (1 - k) / Math.max(1e-3, 1 - a1));
+        if (a1) blitLayer(h, ctx, sp[1], a1);
       }
     }
   };
@@ -1030,19 +1137,29 @@
     var items = wrap ? wrap.querySelectorAll('.stages li') : [];
     if (items.length < 2) return;
     wrap.classList.add('cpw-staged');
-    // phones and portrait tablets pin the figure under the nav (see conversation-path.css), so the
-    // reading line sits below the pinned figure instead of in the middle of the screen
-    var pinMq = window.matchMedia ? window.matchMedia('(max-width: 960px) and (min-height: 600px)') : null;
-    var near = true, queued = 0, cur = -1;
+    // portrait tablets pin the figure under the nav (see conversation-path.css); there the stage being
+    // read is the one with the most text showing below the figure, not the one crossing a line
+    var pinMq = window.matchMedia ? window.matchMedia('(min-width: 561px) and (max-width: 960px) and (min-height: 600px)') : null;
+    var near = true, queued = 0, cur = -1, n = Math.min(items.length, 3);
     function measure() {
       queued = 0;
-      var vh = window.innerHeight || root.clientHeight, line = vh * 0.42;
-      if (pinMq && pinMq.matches) {
-        var fb = h.mount.getBoundingClientRect().bottom;
-        line = Math.min(vh * 0.85, Math.max(line, fb + Math.max(40, (vh - fb) * 0.3)));
-      }
+      var vh = window.innerHeight || root.clientHeight, line = vh * 0.42, i;
       var k = 0;
-      for (var i = 1; i < items.length && i < 3; i++) if (items[i].getBoundingClientRect().top <= line) k = i;
+      for (i = 1; i < n; i++) if (items[i].getBoundingClientRect().top <= line) k = i;
+      if (pinMq && pinMq.matches && h.mount.getBoundingClientRect().top < vh * 0.5) {
+        // share of each stage showing between the figure and the bottom of the screen: the first stage
+        // shown whole (or the most-shown one) is being read, so a stage half under the figure hands over
+        var fb = h.mount.getBoundingClientRect().bottom, vis = [], best = 0;
+        for (i = 0; i < n; i++) {
+          var r = items[i].getBoundingClientRect();
+          vis[i] = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, fb)) / Math.max(1, r.height);
+          if (vis[i] > vis[best] + 0.02) best = i;
+        }
+        if (vis[best] > 0) {
+          // a little hysteresis, so the stage does not flicker where two are nearly level
+          k = cur >= 0 && cur < n && best !== cur && vis[best] < vis[cur] + 0.25 ? cur : best;
+        }
+      }
       if (k !== cur) {
         cur = k;
         for (i = 0; i < items.length; i++) items[i].classList.toggle('is-active', i === k);
@@ -1077,6 +1194,7 @@
     });
     if (!widgets.length) return;
 
+    // measured now, baked on first view (never under the gate)
     widgets.forEach(function (h) { h.resize(true); h.render(); });
 
     if ('ResizeObserver' in window) {
@@ -1098,9 +1216,10 @@
           if (!hst) return;
           var was = hst.visible;
           hst.visible = e.isIntersecting;
-          if (!was && hst.visible && hst.leftAt && performance.now() - hst.leftAt > 20000 && hst.impl.reset && !reduced()) {
-            hst.impl.reset(hst); hst.render();
+          if (!was && hst.visible && hst.leftAt && performance.now() - hst.leftAt > 20000 && hst.impl.reset && !reduced() && !paused()) {
+            hst.impl.reset(hst);
           }
+          if (!was && hst.visible) hst.render(); // first view bakes; a paused or still figure is drawn once
           if (was && !hst.visible) hst.leftAt = performance.now();
         });
         kick();
@@ -1111,7 +1230,14 @@
     }
 
     doc.addEventListener('visibilitychange', kick);
-    doc.addEventListener('site:unlocked', function () { renderAll(true); kick(); });
+    // nothing changed at unlock: draw (baking what is in view, once) and start
+    doc.addEventListener('site:unlocked', function () { widgets.forEach(function (h) { h.render(); }); kick(); });
+    // the site-wide pause: the loop stops on the frame it was showing and resumes from it (kick resets the clock)
+    doc.addEventListener('site:motion', function () { kick(); });
+    if (fcq) {
+      var onFc = function () { readColors(); widgets.forEach(function (h) { h.relayout(); }); flush(); };
+      if (fcq.addEventListener) fcq.addEventListener('change', onFc); else if (fcq.addListener) fcq.addListener(onFc);
+    }
     if ('MutationObserver' in window) {
       new MutationObserver(function () { if (!locked()) { kick(); } }).observe(root, { attributes: true, attributeFilter: ['class'] });
     }
@@ -1123,11 +1249,20 @@
       if (mq.addEventListener) mq.addEventListener('change', onMq); else if (mq.addListener) mq.addListener(onMq);
     }
     if (doc.fonts && doc.fonts.load) {
+      // fonts change the measured labels: re-measure, and re-bake only what was baked with fallback fonts
+      var onFonts = function () {
+        var ok = fontsOK();
+        widgets.forEach(function (h) {
+          if (!h.w || (h.baked && h.bakedFonts === ok)) return;
+          if (h.baked) h.relayout(); else { h.impl.layout(h); if (reduced()) h.impl.still(h); }
+        });
+        flush();
+      };
       Promise.all([
         doc.fonts.load('500 12px "JetBrains Mono"'),
         doc.fonts.load('600 15px "Space Grotesk"')
-      ]).then(function () { renderAll(true); }, function () {});
-      if (doc.fonts.ready) doc.fonts.ready.then(function () { renderAll(true); }, function () {});
+      ]).then(onFonts, function () {});
+      if (doc.fonts.ready) doc.fonts.ready.then(onFonts, function () {});
     }
     kick();
   }

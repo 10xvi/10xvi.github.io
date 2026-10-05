@@ -5,6 +5,8 @@
 
   var root = document.documentElement;
   var reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var forcedMQ = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+  var FC = false; /* forced colors: the canvas draws in system colours only, no glows or tints */
   var TAU = Math.PI * 2;
   var widgets = [];
   var rafId = 0;
@@ -12,9 +14,12 @@
 
   function reduced() { return !!(reduceMQ && reduceMQ.matches); }
   function locked() { return root.classList.contains('gate-locked'); }
+  /* the site-wide "Pause animations" control (WCAG 2.2.2): html.motion-paused + "site:motion" */
+  function paused() { return root.classList.contains('motion-paused'); }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
   function rand(a, b) { return a + Math.random() * (b - a); }
+  function smooth01(t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
 
   /* ---------- palette, read from the page's CSS variables ---------- */
   function hexRgb(str, fb) {
@@ -31,7 +36,27 @@
   }
   function mix(a, b, t) { return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)]; }
   var COL = {};
+  /* a system colour's actual value in the active forced-colors theme */
+  function sysRgb(name, fb) {
+    var pr = document.createElement('span');
+    pr.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;color:' + name;
+    (document.body || root).appendChild(pr);
+    var c = hexRgb(getComputedStyle(pr).color, fb);
+    pr.parentNode.removeChild(pr);
+    return c;
+  }
   function readColors() {
+    FC = !!(forcedMQ && forcedMQ.matches);
+    if (FC) {
+      /* text and structure in CanvasText on Canvas, the shared model and its updates in Highlight;
+         the four signals keep their own waveforms, which is what tells them apart */
+      var cv = sysRgb('Canvas', [0, 0, 0]), ct = sysRgb('CanvasText', [255, 255, 255]);
+      var hl = sysRgb('Highlight', [26, 235, 255]), gt = sysRgb('GrayText', [128, 128, 128]);
+      COL.bg = cv; COL.bgAlt = cv; COL.line = gt; COL.line2 = gt; COL.head = ct; COL.muted = ct;
+      COL.orange = ct; COL.amber = ct; COL.sky = hl; COL.skyDeep = hl; COL.red = ct;
+      for (var f = 0; f < KINDS.length; f++) KINDS[f].rgb = ct;
+      return;
+    }
     var cs = window.getComputedStyle ? getComputedStyle(root) : null;
     function v(n, fb) { return cs ? hexRgb(cs.getPropertyValue(n), fb) : fb; }
     COL.bg = v('--bg', [255, 255, 255]);
@@ -200,6 +225,8 @@
     this.w = w; this.h = h;
     var small = w < 440;
     this.small = small;
+    /* on narrow plates the core is a big share of the figure: shorter packets clear its halo sooner */
+    this.narrow = this.mount.clientWidth < 420;
     var cx = w / 2, cy = h * 0.47;
     this.cx = cx; this.cy = cy;
     var Rc = clamp(Math.min(w, h) * 0.125, 30, 54);
@@ -258,7 +285,12 @@
     }
     /* labels */
     var mine = nodes[0];
-    this.lblShared.style.transform = 'translate(' + Math.round(cx) + 'px,' + Math.round(cy + Rc * 1.42 + 2) + 'px) translate(-50%,0)';
+    var sy = Math.round(cy + Rc * 1.42 + 2);
+    this.lblShared.style.transform = 'translate(' + Math.round(cx) + 'px,' + sy + 'px) translate(-50%,0)';
+    /* the "Shared model" label's box, 6px larger on every side: packets that touch it fade right down */
+    var lw = this.lblShared.offsetWidth, lh = this.lblShared.offsetHeight;
+    this.lblRect = lw ? [Math.round(cx) - lw / 2 - 6, sy - 6, Math.round(cx) + lw / 2 + 6, sy + lh + 6] : null;
+    this.fadeGrads = null;
     var ly = Math.round(mine.y + mine.r + 8);
     var lx = Math.round(clamp(mine.x, 52, w - 52));
     this.lblYours.style.transform = 'translate(' + lx + 'px,' + ly + 'px) translate(-50%,0)';
@@ -270,20 +302,27 @@
 
   WorldModel.prototype.buildLayer = function () {
     var w = this.w, h = this.h, dpr = this.dpr;
-    var mk = function () { var c = document.createElement('canvas'); c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); return c; };
-    this.glow = this.glow && this.glow.width === Math.round(w * dpr) && this.glow.height === Math.round(h * dpr) ? this.glow : mk();
-    this.layer = this.layer && this.layer.width === Math.round(w * dpr) && this.layer.height === Math.round(h * dpr) ? this.layer : mk();
+    /* two offscreen canvases for the life of the widget: resized in place, never replaced */
+    var W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (!this.glow) this.glow = document.createElement('canvas');
+    if (!this.layer) this.layer = document.createElement('canvas');
+    if (this.glow.width !== W) this.glow.width = W;
+    if (this.glow.height !== H) this.glow.height = H;
+    if (this.layer.width !== W) this.layer.width = W;
+    if (this.layer.height !== H) this.layer.height = H;
     /* (1) a soft sky pool around the shared model (normal compositing) */
     var g = this.glow.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     var gR = this.Rc * 3.2, cx = this.cx, cy = this.cy;
-    var gr = g.createRadialGradient(cx, cy, 0, cx, cy, gR);
-    gr.addColorStop(0, rgba(COL.sky, 0.16));
-    gr.addColorStop(0.42, rgba(COL.sky, 0.06));
-    gr.addColorStop(1, rgba(COL.sky, 0));
-    g.fillStyle = gr;
-    g.fillRect(cx - gR, cy - gR, gR * 2, gR * 2);
+    if (!FC) {
+      var gr = g.createRadialGradient(cx, cy, 0, cx, cy, gR);
+      gr.addColorStop(0, rgba(COL.sky, 0.16));
+      gr.addColorStop(0.42, rgba(COL.sky, 0.06));
+      gr.addColorStop(1, rgba(COL.sky, 0));
+      g.fillStyle = gr;
+      g.fillRect(cx - gR, cy - gR, gR * 2, gR * 2);
+    }
     /* (2) channels, then soft drop shadows under the core and under every personal model */
     var c = this.layer.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -301,14 +340,14 @@
     }
     c.setLineDash([]);
     c.save();
-    c.shadowColor = 'rgba(15,23,42,0.10)';
+    c.shadowColor = FC ? 'rgba(0,0,0,0)' : 'rgba(15,23,42,0.10)';
     c.shadowBlur = 22;
     c.shadowOffsetY = 8;
     c.fillStyle = rgba(COL.bg, 1);
     c.beginPath(); c.arc(cx, cy, this.Rc * 1.12, 0, TAU); c.fill();
     c.shadowBlur = 8;
     c.shadowOffsetY = 3;
-    c.shadowColor = 'rgba(15,23,42,0.12)';
+    c.shadowColor = FC ? 'rgba(0,0,0,0)' : 'rgba(15,23,42,0.12)';
     for (i = 0; i < this.nodes.length; i++) {
       n = this.nodes[i];
       c.beginPath(); c.arc(n.x, n.y, n.r + (n.mine ? 3.5 : 2.5), 0, TAU); c.fill();
@@ -335,7 +374,7 @@
     if (n.run <= 0) { n.kind = (n.kind + 1) % 4; n.run = 2 + ((Math.random() * 2) | 0); }
     n.run--;
     var dur = n.mine ? rand(4.2, 5) : rand(4.4, 6.2);
-    this.inb.push({ n: ni, k: n.kind, d: (progress || 0) * n.path.L, v: n.path.L / dur, len: this.small ? 26 : 30 });
+    this.inb.push({ n: ni, k: n.kind, d: (progress || 0) * n.path.L, v: n.path.L / dur, len: this.narrow ? 24 : this.small ? 26 : 30 });
   };
   /* t is in seconds since launch; a negative t is the wait before it leaves the core */
   WorldModel.prototype.spawnOut = function (ni, t) {
@@ -457,6 +496,7 @@
     var q = [0, 0, 0, 0], qe = [0, 0, 0, 0];
     var LV = 6, buckets = this.buckets || (this.buckets = []);
     for (i = 0; i < KINDS.length * LV; i++) { if (buckets[i]) buckets[i].length = 0; else buckets[i] = []; }
+    var lr = this.lblRect;
     for (i = 0; i < this.inb.length; i++) {
       var p = this.inb[i];
       n = nodes[p.n];
@@ -467,6 +507,7 @@
       var al0 = (n.mine ? 1 : 0.86) * clamp(head / 18, 0, 1) * clamp((PL + p.len * 0.35 - tail) / (p.len * 0.9), 0, 1);
       if (al0 <= 0.04) continue;
       var wv = WAVES[p.k], A = p.len * WAVE_RATIO, pts = [];
+      var bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
       pathAt(path, PL, qe);
       for (j = 0; j < wv.u.length; j++) {
         var d = tail + wv.u[j] * p.len;
@@ -475,19 +516,40 @@
           var ex = d - PL;
           q[0] = qe[0] + qe[3] * ex; q[1] = qe[1] - qe[2] * ex; q[2] = qe[2]; q[3] = qe[3];
         } else pathAt(path, d, q);
-        var off = wv.y[j] * A;
-        pts.push(q[0] + q[2] * off, q[1] + q[3] * off);
+        var off = wv.y[j] * A, gx = q[0] + q[2] * off, gy = q[1] + q[3] * off;
+        pts.push(gx, gy);
+        if (gx < bx0) bx0 = gx; if (gx > bx1) bx1 = gx;
+        if (gy < by0) by0 = gy; if (gy > by1) by1 = gy;
       }
       if (pts.length < 4) continue;
+      /* a packet that reaches the "Shared model" label fades down to 15% over its last 10px */
+      if (lr) {
+        var sx2 = Math.max(lr[0] - bx1, bx0 - lr[2], 0), sy2 = Math.max(lr[1] - by1, by0 - lr[3], 0);
+        al0 *= 0.15 + 0.85 * smooth01(Math.sqrt(sx2 * sx2 + sy2 * sy2) / 10);
+        if (al0 <= 0.04) continue;
+      }
       var lv = Math.min(LV - 1, Math.floor(al0 * LV));
       buckets[p.k * LV + lv].push(pts);
+    }
+    /* each bucket strokes with a radial gradient centred on the core: clear inside 1.30 Rc, full
+       from 1.62 Rc out (smoothstep between). The dashed halo sits at 1.36 Rc, where a packet is
+       already down to about 9%, so it dissolves into the halo as it is absorbed instead of being
+       drawn over the rings. Built once per layout. */
+    var fg = this.fadeGrads;
+    if (!fg) {
+      fg = this.fadeGrads = [];
+      for (i = 0; i < KINDS.length * LV; i++) {
+        var kd0 = KINDS[(i / LV) | 0], a0 = kd0.a * Math.min(1, ((i % LV) + 1) / LV);
+        var gr0 = ctx.createRadialGradient(cx, cy, Rc * 1.30, cx, cy, Rc * 1.62);
+        for (k = 0; k <= 4; k++) gr0.addColorStop(k / 4, rgba(kd0.rgb, a0 * smooth01(k / 4)));
+        fg.push(gr0);
+      }
     }
     ctx.lineWidth = 1.75;
     for (i = 0; i < buckets.length; i++) {
       var bk = buckets[i];
       if (!bk.length) continue;
-      var kd = KINDS[(i / LV) | 0];
-      ctx.strokeStyle = rgba(kd.rgb, kd.a * Math.min(1, ((i % LV) + 1) / LV));
+      ctx.strokeStyle = fg[i];
       ctx.beginPath();
       for (j = 0; j < bk.length; j++) {
         var pp = bk[j];
@@ -503,8 +565,7 @@
     cg.addColorStop(1, rgba(SKY, 0.09 + 0.05 * L));
     ctx.fillStyle = rgba(BG, 1);
     ctx.beginPath(); ctx.arc(cx, cy, Rc * 1.12, 0, TAU); ctx.fill();
-    ctx.fillStyle = cg;
-    ctx.fill();
+    if (!FC) { ctx.fillStyle = cg; ctx.fill(); }
     var rot = T * 0.16, tilt = 0.42;
     var ct = Math.cos(tilt), st = Math.sin(tilt), cr = Math.cos(rot), sr = Math.sin(rot);
     var R = Rc * 0.78, proj = this.latProj, lat = this.lat;
@@ -603,7 +664,7 @@
       var s = n.s, r = n.r, spread = (1 - s) * (n.mine ? 4 : 3.2);
       var a = n.mine ? 0.55 + 0.45 * s : 0.35 + 0.5 * s;
       var RC = n.mine ? OR : SL;
-      if (n.mine) {
+      if (n.mine && !FC) {
         ctx.fillStyle = rgba(OR, 0.08 + 0.06 * n.f);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + 13, 0, TAU); ctx.fill();
       }
@@ -635,7 +696,8 @@
     if (!this.layout()) return;
     if (!this.started) {
       this.started = true;
-      this.seedStatic(reduced());
+      /* paused before it ever moved: open on the complete, calm frame; play resumes from it */
+      this.seedStatic(reduced() || paused());
     }
     this.draw();
   };
@@ -669,9 +731,11 @@
     this.plot = plot;
     this.svg = svg;
     this.time = 0;
-    this.c = 0.3;
+    this.c = certaintyAt(0); /* the first frame is the loop's own first frame: no jump when play starts */
     this.w = 0; this.h = 0;
   }
+  /* one sweep low -> high -> low every 13 s */
+  function certaintyAt(t) { return 0.5 - 0.44 * Math.cos(TAU * (t + 2.2) / 13); }
   /* normalized logistic: f(0)=0, rises with certainty, levels off at M below the limit */
   function sizeOf(c) {
     var k = 7.2, c0 = 0.5;
@@ -706,15 +770,15 @@
     var s = '';
     s += '<defs>' +
       '<pattern id="' + id + 'h" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
-      '<line x1="0" y1="0" x2="0" y2="7" stroke="' + RED + '" stroke-opacity=".22" stroke-width="1"/></pattern>' +
+      '<line class="ms-sf-hatch-line" x1="0" y1="0" x2="0" y2="7" stroke="' + RED + '" stroke-opacity=".22" stroke-width="1"/></pattern>' +
       '<linearGradient id="' + id + 'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + SKY + '" stop-opacity=".16"/><stop offset="1" stop-color="' + SKY + '" stop-opacity=".02"/></linearGradient>' +
       '<linearGradient id="' + id + 'c" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="' + SKY + '" stop-opacity=".55"/><stop offset=".55" stop-color="' + SKY + '" stop-opacity="1"/></linearGradient>' +
       '<radialGradient id="' + id + 'g"><stop offset="0" stop-color="' + SKY + '" stop-opacity=".22"/><stop offset="1" stop-color="' + SKY + '" stop-opacity="0"/></radialGradient>' +
       '<linearGradient id="' + id + 'r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + RED + '" stop-opacity=".02"/><stop offset="1" stop-color="' + RED + '" stop-opacity=".07"/></linearGradient>' +
       '</defs>';
     /* beyond the limit: a soft red, hatched zone that nothing enters */
-    s += '<rect x="' + (x0 + 0.5) + '" y="' + (yT + 2) + '" width="' + (x1 - x0 - 0.5) + '" height="' + (yLim - yT - 2) + '" fill="url(#' + id + 'r)"/>';
-    s += '<rect x="' + (x0 + 0.5) + '" y="' + (yT + 2) + '" width="' + (x1 - x0 - 0.5) + '" height="' + (yLim - yT - 2) + '" fill="url(#' + id + 'h)"/>';
+    s += '<rect class="ms-sf-zone" x="' + (x0 + 0.5) + '" y="' + (yT + 2) + '" width="' + (x1 - x0 - 0.5) + '" height="' + (yLim - yT - 2) + '" fill="url(#' + id + 'r)"/>';
+    s += '<rect class="ms-sf-hatch" x="' + (x0 + 0.5) + '" y="' + (yT + 2) + '" width="' + (x1 - x0 - 0.5) + '" height="' + (yLim - yT - 2) + '" fill="url(#' + id + 'h)"/>';
     /* fine guides */
     s += '<g class="ms-sf-grid">';
     for (i = 1; i <= 3; i++) {
@@ -727,7 +791,7 @@
     }
     s += '</g>';
     /* area under the curve */
-    s += '<path d="' + area + '" fill="url(#' + id + 'a)"/>';
+    s += '<path class="ms-sf-area" d="' + area + '" fill="url(#' + id + 'a)"/>';
     /* axes */
     s += '<g class="ms-sf-axis" fill="none" stroke-width="1">' +
       '<path d="M' + x0 + ' ' + (yT - 10) + 'V' + yB + 'H' + x1 + '"/>' +
@@ -748,7 +812,7 @@
       '<line class="ms-sf-across" data-r="across"/>' +
       '<path class="ms-sf-bar" data-r="bar"/>' +
       '<circle class="ms-sf-tick" data-r="tick" r="2.5"/>' +
-      '<circle data-r="halo" fill="url(#' + id + 'g)"/>' +
+      '<circle class="ms-sf-halo" data-r="halo" fill="url(#' + id + 'g)"/>' +
       '<circle class="ms-sf-halo-ring" data-r="ring"/>' +
       '<circle class="ms-sf-dot" data-r="dot" r="3.5"/>' +
       '</g>';
@@ -806,8 +870,7 @@
   };
   Safety.prototype.tick = function (dt) {
     this.time += dt;
-    var T = 13; /* seconds for one sweep low -> high -> low */
-    this.c = 0.5 - 0.44 * Math.cos(TAU * (this.time + 2.2) / T);
+    this.c = certaintyAt(this.time);
     if (this.layout()) this.place(this.c);
   };
   Safety.prototype.renderStatic = function () {
@@ -817,10 +880,11 @@
   };
 
   /* =====================================================================
-     controller: one loop for every mount, paused off screen / hidden / locked
+     controller: one loop for every mount, paused off screen / hidden / locked / by the visitor.
+     Stopping the loop leaves the last drawn frame in place; play resumes from that same state.
      ===================================================================== */
   function anyActive() {
-    if (reduced() || locked() || document.hidden) return false;
+    if (reduced() || paused() || locked() || document.hidden) return false;
     for (var i = 0; i < widgets.length; i++) if (widgets[i].visible) return true;
     return false;
   }
@@ -870,15 +934,26 @@
     widgets.forEach(function (w) { reduced() ? w.renderStatic() : w.resize(); });
 
     if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () { widgets.forEach(function (w) { if (w instanceof Safety) w.resize(); }); });
+      /* re-measure once the mono face is in: the limit plate and the label keep-out box follow the text */
+      document.fonts.ready.then(function () { widgets.forEach(function (w) { reduced() ? w.renderStatic() : w.resize(); }); });
     }
     document.addEventListener('visibilitychange', kick);
+    /* the class change alone restarts or stops the loop (observer below); the event is a second,
+       explicit cue, read after the toggle has settled */
+    document.addEventListener('site:motion', function () { setTimeout(kick, 0); });
     document.addEventListener('site:unlocked', function () {
       widgets.forEach(function (w) { reduced() ? w.renderStatic() : w.resize(); });
       kick();
     });
     if ('MutationObserver' in window) {
       new MutationObserver(kick).observe(root, { attributes: true, attributeFilter: ['class'] });
+    }
+    if (forcedMQ) {
+      var onFC = function () {
+        readColors();
+        widgets.forEach(function (w) { w.layerOk = false; w.fadeGrads = null; w.w = 0; reduced() ? w.renderStatic() : w.resize(); });
+      };
+      if (forcedMQ.addEventListener) forcedMQ.addEventListener('change', onFC); else if (forcedMQ.addListener) forcedMQ.addListener(onFC);
     }
     if (reduceMQ) {
       var onRM = function () { widgets.forEach(function (w) { w.started = false; reduced() ? w.renderStatic() : w.resize(); }); kick(); };

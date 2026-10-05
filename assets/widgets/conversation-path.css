@@ -109,38 +109,73 @@
   box-shadow: 0 0 0 5px var(--orange-soft, #fff7ed);
 }
 
-/* phones and portrait tablets: the rings pin under the nav while the three stages scroll beneath,
-   so the ring a stage describes stays in view while it is read (the same pattern as the loop).
-   An opaque band in the section tint, full bleed, keeps the passing text from showing through. */
-@media (max-width: 960px) and (min-height: 600px) {
+/* phones: the figure sits inline above the three stages (pinning it would cover half the screen).
+   The canvas takes the full column, so the outer labels have room beside the rings. */
+@media (max-width: 560px) {
+  .path > .widget[data-widget="path"] {
+    width: 100%;
+    max-width: none;
+    margin: 0 auto;
+  }
+  .path > .widget[data-widget="path"] .cpw-stage { max-height: 340px; }
+}
+
+/* portrait tablets: the rings pin under the nav while the three stages scroll beneath, so the ring a
+   stage describes stays in view while it is read (the same pattern as the loop). The canvas is as wide
+   as the column (the rings stay a centred square), so every label fits on one line. An opaque band in
+   the section tint, full bleed, keeps the passing text from showing through; it only feathers below. */
+@media (min-width: 561px) and (max-width: 960px) and (min-height: 600px) {
   .path > .widget[data-widget="path"] {
     position: sticky;
     top: 76px;
     z-index: 1;
     width: 100%;
-    max-width: min(520px, 44vh);
-    max-width: min(520px, 44svh);   /* svh: no resize while a phone's toolbar slides */
+    max-width: none;
     /* the pin releases early, so the rings leave together with the last stage instead of covering it;
        the list's matching negative margin keeps the layout exactly where it was */
     margin-bottom: 120px;
   }
+  .path > .widget[data-widget="path"] .cpw-stage {
+    max-height: min(520px, 44vh);
+    max-height: min(520px, 44svh);   /* svh: no resize while a phone's toolbar slides */
+  }
   .path > .widget[data-widget="path"] + .stages { margin-top: -120px; }
-  .path > .widget[data-widget="path"]::before {
+  .path > .widget[data-widget="path"]::before,
+  .path > .widget[data-widget="path"]::after {
     content: "";
     position: absolute;
     left: 50%;
     width: 100vw;
     margin-left: -50vw;
-    top: -12px;
-    bottom: -28px;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(to bottom, var(--bg-alt, #f8fafc) 0, var(--bg-alt, #f8fafc) calc(100% - 22px), rgba(248, 250, 252, 0) 100%);
+  }
+  /* solid ground to 16px below the figure, then a short feather */
+  .path > .widget[data-widget="path"]::before {
+    top: -12px;
+    bottom: -16px;
+    background: var(--bg-alt, #f8fafc);
+  }
+  .path > .widget[data-widget="path"]::after {
+    top: calc(100% + 16px);
+    height: 12px;
+    background: linear-gradient(to bottom, var(--bg-alt, #f8fafc), rgba(248, 250, 252, 0));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .path.cpw-staged .stages li::after { transition: none; }
+}
+
+/* forced colours: the stage being read keeps a visible fill */
+@media (forced-colors: active) {
+  .path.cpw-staged .stages li.is-active::after,
+  .path.cpw-staged .stages li:first-child.is-active::after {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    box-shadow: none;
+  }
 }
 
 /* wide screens: the rings stay centred beside the stages, and hold in view while the last one is read */

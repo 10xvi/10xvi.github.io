@@ -28,10 +28,17 @@
   var reduceMQ = mq('(prefers-reduced-motion: reduce)');
   var mobileMQ = mq('(max-width: 759px)');
   var singleMQ = mq('(max-width: 560px)');  // phones: one panel that plays the three stages in turn
+  var fcMQ = mq('(forced-colors: active)');
   var DUR = [4.4, 4.6, 7.4];                 // phones: seconds each stage plays before the next
   var HOLD = 6;                              // extra seconds a stage stays after it is picked
   var XF_OUT = 0.16, XF_IN = 0.3;            // phones: fade between stages (seconds)
   var REVEAL_HOLD = 450;                     // ms after the section's reveal before the clock starts
+  /* wider screens: the three cards ease in left to right when the figure first plays (seconds) */
+  var STAG = 0.35, RAMP = 0.6;
+  /* card 03 opens with restoration already under way (the first wave has passed and its cohort is
+     warming back into step), so a glance across the row never reads 01 beside two copies of 'lost'.
+     Its cycle waits while the card fades in, and the next wave sweeps in once it has settled. */
+  var PRE = 1.15;
 
   function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
@@ -108,7 +115,7 @@
   }
 
   /* ---------------- Panel: one view of the tissue ---------------- */
-  function Panel(index) { this.index = index; this.mode = MODES[index]; }
+  function Panel(index) { this.index = index; this.mode = MODES[index]; this.cOff = 0; }
   Panel.prototype.build = function (tissue, trace, s) {
     var R = rng(9137);                 // same seed: the same tissue in all three panels
     this.tissue = tissue; this.trace = trace; this.s = s;
@@ -174,7 +181,7 @@
   /* where the restore loop is at time T. On phones the stage starts its own cycle (t0) and holds the
      restored state instead of letting the cells drift apart again. */
   Panel.prototype.cycAt = function (T) {
-    return this.t0 != null ? clamp(T - this.t0, 0, DECAY - 1e-3) : mod(T, RC);
+    return this.t0 != null ? clamp(T - this.t0, 0, DECAY - 1e-3) : mod(T - this.cOff, RC);
   };
   Panel.prototype.clearBuf = function () { this.bt = []; this.bm = []; this.bc = []; this.bs = []; this.bsc = []; for (var k = 0; k < this.samples.length; k++) { this.bs.push([]); this.bsc.push([]); } };
   Panel.prototype.sample = function (T) {
@@ -206,7 +213,8 @@
   Panel.prototype.step = function (T, dt) {
     var cells = this.cells, i, ce;
     if (this.mode === 'restore') {
-      var cyc = this.cycAt(T), prev = this.cycAt(T - dt);
+      // held (card 03 fading in): the cycle stands still, so no wave front moves or lands twice
+      var cyc = this.cycAt(T), prev = this.held ? cyc : this.cycAt(T - dt);
       if (cyc >= DECAY) {
         for (i = 0; i < cells.length; i++) cells[i].eT = 0;
       } else {
@@ -299,10 +307,22 @@
     for (i = 0; i < 3; i++) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'cw-step cw-t' + i;
       b.innerHTML = '<span class="cw-sl"><span class="cw-num">0' + (i + 1) + '</span><span class="cw-sn">' + SHORT[i] + '</span></span><span class="cw-bar"><span class="cw-bf"></span></span>';
-      b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      if (i === 0) b.setAttribute('aria-current', 'step');
       b.addEventListener('click', this.pick.bind(this, i));
       steps.appendChild(b); this.steps.push({ el: b, fill: b.querySelector('.cw-bf'), k: -1 });
     }
+    /* keyboard focus on the stage buttons stops the auto-advance, so the stage does not change under
+       the reader; it resumes once focus leaves the set */
+    this.kb = false;
+    steps.addEventListener('focusin', function (e) {
+      var fv = true;
+      try { fv = e.target.matches(':focus-visible'); } catch (_) {}
+      if (fv) self.kb = true;
+    });
+    steps.addEventListener('focusout', function (e) {
+      if (e.relatedTarget && steps.contains(e.relatedTarget)) return;
+      self.kb = false;
+    });
     mount.appendChild(steps);
     mount.appendChild(root);
     this.root = root; this.track = track; this.cv = cv; this.ctx = cv.getContext('2d');
@@ -310,6 +330,11 @@
     this.T = 0; this.hiddenAt = 0; this.running = false; this.visible = false; this.W = 0; this.H = 0; this.lastFill = -1;
     this.stage = 0; this.prevStage = -1; this.stageT = 0; this.stageDur = DUR[0]; this.xf = 1;
     this.reduce = !!(reduceMQ && reduceMQ.matches);
+    /* the site-wide pause control: html.motion-paused, announced with the site:motion event */
+    this.paused = document.documentElement.classList.contains('motion-paused');
+    /* wider screens: the cards' entrance, played once when the figure first runs */
+    this.intro = 0; this.introOn = !this.reduce && !this.paused; this.introHeads = 0;
+    mount.classList.toggle('cw-intro', this.introOn);
     /* hold the clock until the section has faded in, so the first pulses are not spent while it is still rising */
     this.revealedAt = 0;
     var rv = mount.closest ? mount.closest('.reveal') : null;
@@ -344,16 +369,47 @@
     } else this.visible = true;
     document.addEventListener('visibilitychange', function () { self.update(); });
     document.addEventListener('site:unlocked', function () { self.readColors(); self.onResize(true); self.update(); });
+    document.addEventListener('site:motion', function (e) {
+      var d = e && e.detail;
+      self.setPaused(d && typeof d.paused === 'boolean' ? d.paused : document.documentElement.classList.contains('motion-paused'));
+    });
     if (reduceMQ) {
       var onRM = function () {
-        self.reduce = reduceMQ.matches; self.xf = 1; self.prevStage = -1; self.reset();
+        self.reduce = reduceMQ.matches; self.xf = 1; self.prevStage = -1; self.endIntro(); self.reset();
         if (self.single) { self.showHead(self.stage); self.syncSteps(); }
         self.render(); self.update();
       };
       if (reduceMQ.addEventListener) reduceMQ.addEventListener('change', onRM); else if (reduceMQ.addListener) reduceMQ.addListener(onRM);
     }
+    if (fcMQ) {
+      var onFC = function () { self.readColors(); self.render(); };
+      if (fcMQ.addEventListener) fcMQ.addEventListener('change', onFC); else if (fcMQ.addListener) fcMQ.addListener(onFC);
+    }
     this.update();
   }
+  /* pause: stop on the frame in view (a stage cross-fade or the cards' entrance completes at once,
+     so nothing is left half-drawn); unpause carries on from the same moment */
+  Widget.prototype.setPaused = function (p) {
+    p = !!p;
+    if (p === this.paused) return;
+    this.paused = p;
+    if (p) {
+      this.endIntro();
+      if (this.single && this.xf < 1) { this.xf = 1; this.prevStage = -1; this.showHead(this.stage); }
+      this.render();
+    }
+    this.update();
+  };
+  Widget.prototype.endIntro = function () {
+    if (!this.introOn) return;
+    this.introOn = false; this.mount.classList.remove('cw-intro');
+  };
+  /* entrance opacity of card i (1 once the entrance is done) */
+  Widget.prototype.alphaOf = function (i) {
+    if (!this.introOn) return 1;
+    var x = clamp((this.intro - i * STAG) / RAMP, 0, 1);
+    return 1 - (1 - x) * (1 - x) * (1 - x);
+  };
   Widget.prototype.readColors = function () {
     var cs = getComputedStyle(document.documentElement);
     function v(n, fb) { return parseColor(cs.getPropertyValue(n), fb); }
@@ -372,6 +428,19 @@
     this.LOST = mixc(mixc(this.MU, this.LINE2, 0.3), this.RED, 0.24);
     this.LOSTN = mixc(this.MU, this.RED, 0.2);
     this.ORD = mixc(this.OR, [154, 52, 18], 0.28);   // deeper orange for nuclei
+    /* forced colours: system colours only. Cells in step are drawn in CanvasText, cells out of step in
+       GrayText, the signal in Highlight; washes and soft fills are dropped. */
+    this.fc = !!(fcMQ && fcMQ.matches);
+    if (this.fc && document.body) {
+      var pr = document.createElement('span');
+      pr.style.cssText = 'position:absolute;visibility:hidden;forced-color-adjust:none;color:CanvasText;background-color:Canvas;border-top:1px solid Highlight;border-bottom:1px solid GrayText';
+      document.body.appendChild(pr);
+      var ps = getComputedStyle(pr);
+      this.CT = parseColor(ps.color, [0, 0, 0]); this.BG = parseColor(ps.backgroundColor, [255, 255, 255]);
+      this.SKY = this.SKYD = parseColor(ps.borderTopColor, [0, 120, 215]); this.GT = parseColor(ps.borderBottomColor, [128, 128, 128]);
+      this.LINE = this.LINE2 = this.GT;
+      document.body.removeChild(pr);
+    }
     this.buildPalette();
   };
   /* every (coherence, voltage) state a cell can show, resolved once into fill, stroke and nucleus styles.
@@ -379,6 +448,17 @@
   Widget.prototype.buildPalette = function () {
     var BG = this.BG, N1 = [244, 244, 245], N3 = [212, 212, 216], N4 = [161, 161, 170];   // true neutrals: a slate midpoint reads blue beside orange
     var pal = [], ci, vi;
+    if (this.fc) {
+      for (ci = 0; ci <= CQ; ci++) {
+        var on = ci / CQ >= 0.5, sc = rgba(on ? this.CT : this.GT, 1);
+        for (vi = 0; vi <= VQ; vi++) pal.push({ fill: 'rgba(0,0,0,0)', stroke: sc, nuc: sc, nr: 0.9 + 0.3 * (vi / VQ) * (ci / CQ) });
+      }
+      this.pal = pal; this.flashS = []; this.traceC = [];
+      for (var f0 = 0; f0 <= FQ; f0++) this.flashS.push(rgba(this.SKY, f0 / FQ));
+      for (ci = 0; ci <= 32; ci++) this.traceC.push(ci >= 16 ? this.CT : this.GT);
+      this.gcache = {};
+      return;
+    }
     for (ci = 0; ci <= CQ; ci++) {
       var c = ci / CQ;
       for (vi = 0; vi <= VQ; vi++) {
@@ -402,13 +482,13 @@
   /* coming back on screen after a while with card 03 already restored (or drifting apart):
      restart its loop so the viewer sees the signal re-entrain the tissue within a few seconds */
   Widget.prototype.replay = function () {
-    if (this.reduce || !this.hiddenAt || performance.now() - this.hiddenAt < 1500) return;
+    if (this.reduce || this.paused || !this.hiddenAt || performance.now() - this.hiddenAt < 1500) return;
     if (this.single) {
       // phones: away for a while, start the story again from stage 01
       if (performance.now() - this.hiddenAt > 4000 && (this.stage || this.stageT > 0.5)) this.restart(0);
       return;
     }
-    if (mod(this.T, RC) < 4.6) return;
+    if (this.panels[2].cycAt(this.T) < 4.6) return;
     // done on the next frame, not inside the IntersectionObserver callback
     this.restart();
   };
@@ -419,7 +499,8 @@
     requestAnimationFrame(function () {
       self.replayPending = false;
       if (self.single) { self.goStage(stage || 0, false, true); return; }
-      self.T = Math.ceil(self.T / RC) * RC; self.reset(true); self.render();
+      if (self.paused || self.reduce) return;
+      self.panels[2].cOff = self.T - PRE; self.reset(true); self.render();
     });
   };
   /* phones: a stage button was pressed */
@@ -431,12 +512,18 @@
      plays for longer before the cycle moves on. instant skips the fade. */
   Widget.prototype.goStage = function (i, picked, instant) {
     var p = this.panels[i];
-    if (i !== this.stage) { this.prevStage = instant || this.reduce ? -1 : this.stage; this.xf = instant || this.reduce ? 1 : 0; }
+    if (this.reduce || this.paused) instant = true;
+    if (i !== this.stage) { this.prevStage = instant ? -1 : this.stage; this.xf = instant ? 1 : 0; }
     else if (instant) { this.prevStage = -1; this.xf = 1; }
     this.stage = i; this.stageT = 0; this.stageDur = DUR[i] + (picked ? HOLD : 0);
     if (!this.reduce) {
-      if (p.mode === 'restore') p.t0 = this.T;
-      p.init(this.T); p.geomValid = false;
+      if (p.mode === 'restore') {
+        // paused: show stage 03 with its restoration under way, as the reduced-motion frame does
+        p.t0 = this.T - (this.paused ? STILL : 0);
+        p.init(p.t0);
+        for (var t = p.t0 + 1 / 60; t <= this.T + 1e-6; t += 1 / 60) p.step(t, 1 / 60);
+      } else p.init(this.T);
+      p.geomValid = false;
     }
     // the old name fades with its tissue; the new one comes in with the new tissue
     this.showHead(this.xf >= 1 ? i : -1);
@@ -452,12 +539,15 @@
       var f = k < this.stage ? 1 : k > this.stage ? 0 : (this.reduce ? 1 : clamp(this.stageT / this.stageDur, 0, 1));
       f = Math.round(f * 400) / 400;
       if (f !== st.k) { st.k = f; st.fill.style.transform = 'scaleX(' + f.toFixed(4) + ')'; }
-      if (st.on !== on) { st.on = on; st.el.classList.toggle('on', on); st.el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+      if (st.on !== on) {
+        st.on = on; st.el.classList.toggle('on', on);
+        if (on) st.el.setAttribute('aria-current', 'step'); else st.el.removeAttribute('aria-current');
+      }
     }
   };
   Widget.prototype.locked = function () { return document.documentElement.classList.contains('gate-locked'); };
   Widget.prototype.update = function () {
-    var want = !this.reduce && this.visible && !document.hidden && !this.locked();
+    var want = !this.reduce && !this.paused && this.visible && !document.hidden && !this.locked();
     if (want && this.revealedAt !== -1) {
       // the section has not faded in yet (or only just): keep the opening frame and start a beat later
       var self = this;
@@ -490,7 +580,7 @@
     var rects = [], i, gap, pad, traceH, CW = W, headH = 44;
     if (single) {
       // one card the width of the column; the three stages take turns in it
-      gap = 0; pad = 16; traceH = 40; headH = 26;
+      gap = 0; pad = 16; traceH = 40; headH = -6;   // no in-card head: the stage indicator above names the stage
       for (i = 0; i < 3; i++) rects.push({ x: 0, y: 0, w: W, h: H });
     } else if (!vertical) {
       gap = clamp(W * 0.028, 20, 40); pad = W < 1000 ? 16 : 22; traceH = clamp(H * 0.13, 40, 56);
@@ -524,19 +614,21 @@
       // entering the phone layout starts at stage 01; leaving it gives card 03 back its own loop
       if (single) { this.stage = 0; this.prevStage = -1; this.xf = 1; this.stageT = 0; this.stageDur = DUR[0]; }
       this.panels[2].t0 = single && !this.reduce ? this.T : null;
+      if (!single && !this.reduce) this.panels[2].cOff = this.T - PRE;
       for (i = 0; i < 3; i++) this.heads[i].el.classList.remove('on');
     }
     if (single) { this.showHead(this.xf < 1 && this.prevStage >= 0 && this.xf < XF_OUT / (XF_OUT + XF_IN) ? -1 : this.stage); this.syncSteps(); }
   };
   Widget.prototype.reset = function (keepTime) {
-    if (!keepTime) this.T = 0;
-    if (this.reduce) this.T = STILL;
     var pr = this.panels[2];
+    if (!keepTime) this.T = 0;
+    if (this.reduce) { this.T = STILL; pr.cOff = 0; }
+    else if (!keepTime) pr.cOff = this.paused ? -STILL : -PRE;   // paused from the start: the explanatory still
     pr.t0 = this.single && !this.reduce ? (pr.t0 != null && this.stage === 2 && pr.t0 <= this.T ? pr.t0 : this.T) : null;
     for (var i = 0; i < 3; i++) {
       var p = this.panels[i];
       if (p.mode === 'restore') {
-        var Tc = p.t0 != null ? p.t0 : this.T - mod(this.T, RC);
+        var Tc = p.t0 != null ? p.t0 : this.T - p.cycAt(this.T);
         p.init(Tc);
         for (var t = Tc + 1 / 60; t <= this.T + 1e-6; t += 1 / 60) p.step(t, 1 / 60);
       } else p.init(this.T);
@@ -559,13 +651,27 @@
         this.xf = Math.min(1, this.xf + dt / (XF_OUT + XF_IN));
         if (was < a && this.xf >= a) this.showHead(this.stage);
         if (this.xf >= 1) this.prevStage = -1;
-      } else if (this.inView !== false) {
+      } else if (this.inView !== false && !this.kb) {
         this.stageT += dt;
         if (this.stageT >= this.stageDur) this.goStage((this.stage + 1) % 3, false, false);
       }
       this.syncSteps();
+      if (this.introOn) this.endIntro();
     } else {
-      for (s = 0; s < n; s++) { this.T += h; for (i = 0; i < 3; i++) this.panels[i].step(this.T, h); }
+      var hold = this.introOn && this.intro < 2 * STAG + RAMP, p2 = this.panels[2];
+      p2.held = hold;
+      for (s = 0; s < n; s++) {
+        this.T += h;
+        if (hold) p2.cOff += h;   // card 03's signal waits until the card has faded in
+        for (i = 0; i < 3; i++) this.panels[i].step(this.T, h);
+      }
+      if (this.introOn) {
+        this.intro += dt;
+        var nh = this.intro >= 2 * STAG ? 3 : this.intro >= STAG ? 2 : 1;
+        if (nh !== this.introHeads) { this.introHeads = nh; for (i = 0; i < 3; i++) this.heads[i].el.classList.toggle('on', i < nh); }
+        if (this.intro >= 2 * STAG + RAMP) this.endIntro();
+      }
+      p2.held = false;
     }
     this.render();
     requestAnimationFrame(this.loop);
@@ -588,8 +694,14 @@
       this.drawTrace(this.panels[show]);
       ctx.globalAlpha = 1;
     } else {
-      for (var i = 0; i < 3; i++) { this.drawTissue(this.panels[i]); this.drawTrace(this.panels[i]); }
+      for (var i = 0; i < 3; i++) {
+        var ai = this.alphaOf(i);
+        if (ai <= 0.003) continue;
+        ctx.globalAlpha = ai;
+        this.drawTissue(this.panels[i]); this.drawTrace(this.panels[i]);
+      }
       this.drawArrows();
+      ctx.globalAlpha = 1;
     }
     // card 03 rule: how much of the tissue is back in step
     var pr = this.panels[2], mc = 0;
@@ -605,7 +717,7 @@
     var mv = 0;
     for (i = 0; i < cells.length; i++) mv += volt(cells[i].phi) * p.coh(cells[i]);
     mv /= cells.length;
-    if (mv > 0.01) {
+    if (mv > 0.01 && !this.fc) {
       var t = p.tissue;
       ctx.save(); ctx.translate(p.cx, p.cy); ctx.scale(t.w * 0.6, t.h * 0.72);
       var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
@@ -655,7 +767,7 @@
       var gb = ctx.createRadialGradient(p.sx, p.sy, Math.max(0, r - 26), p.sx, p.sy, r);
       gb.addColorStop(0, rgba(SKY, 0)); gb.addColorStop(1, rgba(SKY, 0.16 * a));
       ctx.beginPath(); ctx.arc(p.sx, p.sy, r, -span, span); ctx.arc(p.sx, p.sy, Math.max(1, r - 26), span, -span, true); ctx.closePath();
-      ctx.fillStyle = gb; ctx.fill();
+      if (!this.fc) { ctx.fillStyle = gb; ctx.fill(); }
       ctx.beginPath(); ctx.arc(p.sx, p.sy, r, -span, span);
       ctx.strokeStyle = rgba(SKYD, 0.9 * a); ctx.lineWidth = 1.5; ctx.stroke();
       ctx.beginPath(); ctx.arc(p.sx, p.sy, Math.max(1, r - 9), -span * 0.92, span * 0.92);
@@ -714,20 +826,23 @@
     ctx.strokeStyle = grad(p.bc, 0.3, 0.9, 'l'); ctx.stroke();
     // soft area under the mean rhythm
     ctx.beginPath();
-    if (line(p.bm, true)) {
+    if (!this.fc && line(p.bm, true)) {
       ctx.lineTo(X(p.bt[n - 1]), tr.y + tr.h); ctx.lineTo(tr.x - 6, tr.y + tr.h); ctx.closePath();
       ctx.fillStyle = grad(p.bc, 0.1, 0.5, 'a'); ctx.fill();
     }
     ctx.beginPath(); line(p.bm, true); ctx.lineWidth = 1.5; ctx.strokeStyle = grad(p.bc, 1, 0.85, 'm'); ctx.stroke();
     ctx.restore();
     var lx = X(p.bt[n - 1]), ly = Y(p.bm[n - 1]), lc = col(p.bc[n - 1]);
-    ctx.beginPath(); ctx.arc(lx, ly, 4.5, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(lx, ly, 4.5, 0, TAU); ctx.fillStyle = rgba(this.BG, 1); ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(lc, 1); ctx.stroke();
   };
   Widget.prototype.drawArrows = function () {
     var ctx = this.ctx, r = this.rects;
     ctx.strokeStyle = rgba(this.LINE2, 1); ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (var i = 0; i < 2; i++) {
+      var ai = this.alphaOf(i + 1);
+      if (ai <= 0.003) continue;
+      ctx.globalAlpha = ai;
       ctx.beginPath();
       if (!this.vertical) {
         var x = r[i].x + r[i].w + this.gap / 2, y = r[i].tissue.y + r[i].tissue.h / 2;

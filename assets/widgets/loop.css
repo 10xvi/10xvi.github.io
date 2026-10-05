@@ -150,10 +150,10 @@
   }
 }
 /* the pinned ring glides with the nav when it slides away (--sticky-top); the page's reveal fade is
-   repeated here so this rule does not cancel it */
+   repeated here so this rule does not cancel it (not while the page's own pause control is on) */
 @media (max-width: 960px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
-  .js .loop > .widget.reveal.in:not(.skip-reveal)[data-widget="loop"],
-  .loop > .widget:not(.reveal)[data-widget="loop"] {
+  html:not(.motion-paused).js .loop > .widget.reveal.in:not(.skip-reveal)[data-widget="loop"],
+  html:not(.motion-paused) .loop > .widget:not(.reveal)[data-widget="loop"] {
     transition: top .3s var(--ease-out, cubic-bezier(.2, .7, .2, 1)),
       opacity var(--dur-4, 700ms) var(--ease-out, cubic-bezier(.2, .7, .2, 1)),
       transform calc(var(--dur-4, 700ms) + 120ms) var(--ease-out, cubic-bezier(.2, .7, .2, 1));
@@ -179,8 +179,50 @@
   #loop-steps li::before { top: 14px; bottom: 14px; }
 }
 
+/* forced colours (Windows contrast themes): the canvas redraws itself in system colours (see loop.js);
+   the labels keep no backplate over it, and the active step is marked by an outline, a Highlight bar and
+   Highlight text, since its tint, card shadow and colour bar are all background paint that gets stripped */
+@media (forced-colors: active) {
+  [data-widget="loop"] .lp-label,
+  [data-widget="loop"] .lp-core {
+    forced-color-adjust: none;
+    background: transparent;
+    color: CanvasText;
+  }
+  [data-widget="loop"] .lp-num,
+  [data-widget="loop"] .lp-name,
+  [data-widget="loop"] .lp-core { color: CanvasText; }
+  [data-widget="loop"] .lp-label.is-active .lp-num,
+  [data-widget="loop"] .lp-label.is-active .lp-name { color: Highlight; }
+  #loop-steps li.is-active {
+    outline: 2px solid Highlight;
+    outline-offset: 0;
+  }
+  #loop-steps li::before {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  #loop-steps li.is-active h3,
+  #loop-steps li.is-active .num { color: Highlight; }
+}
+/* the pinned ring's band is a gradient, which forced colours drops: make it a plain Canvas band so the
+   steps still pass out of sight behind the ring */
+@media (forced-colors: active) and (max-width: 960px) and (min-height: 600px) {
+  [data-widget="loop"]::before {
+    forced-color-adjust: none;
+    background: Canvas;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-widget="loop"] .lp-num,
   [data-widget="loop"] .lp-name,
   #loop-steps li, #loop-steps li::before, #loop-steps li .num, #loop-steps li h3 { transition: none; }
 }
+/* the page's "Pause animations" control mirrors reduced motion */
+html.motion-paused [data-widget="loop"] .lp-num,
+html.motion-paused [data-widget="loop"] .lp-name,
+html.motion-paused #loop-steps li,
+html.motion-paused #loop-steps li::before,
+html.motion-paused #loop-steps li .num,
+html.motion-paused #loop-steps li h3 { transition: none; }

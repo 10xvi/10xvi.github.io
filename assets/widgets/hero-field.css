@@ -10,3 +10,5 @@ canvas[data-widget="hero-field"] {
 @media (prefers-reduced-motion: reduce) {
   canvas[data-widget="hero-field"] { transition: none; }
 }
+/* site-wide "Pause animations": the field appears as a still, without the fade */
+html.motion-paused canvas[data-widget="hero-field"] { transition: none; }
