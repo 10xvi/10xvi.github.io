@@ -49,7 +49,7 @@
   color: var(--text, #475569);
   transition: color .45s ease;
 }
-[data-widget="loop"] .lp-label.is-active .lp-num { color: var(--lp-c, var(--orange, #f97316)); }
+[data-widget="loop"] .lp-label.is-active .lp-num { color: var(--lp-ink, var(--orange-ink, #c2410c)); }
 [data-widget="loop"] .lp-label.is-active .lp-name { color: var(--head, #0f172a); }
 
 /* phones: numbers only, the list beside carries the names */
@@ -70,9 +70,17 @@
   color: var(--muted, #64748b);
 }
 [data-widget="loop"] .lp-core span { white-space: nowrap; }
+[data-widget="loop"].lp-bare .lp-core { display: none; }
 [data-widget="loop"].lp-pointing { cursor: default; }
 
-/* the step list, kept in sync with the ring; each step keeps its own colour (set by the script as --lp-c) */
+/* the step list, kept in sync with the ring; each step keeps its own colour (set by the script as --lp-c,
+   with a text-safe twin --lp-ink for the small step numbers) */
+#loop-steps li[data-step="1"] .num { color: var(--lp-ink, var(--red-ink, #b91c1c)); }
+#loop-steps li[data-step="2"] .num { color: var(--lp-ink, var(--orange-ink, #c2410c)); }
+#loop-steps li[data-step="3"] .num { color: var(--lp-ink, var(--amber-ink, #b45309)); }
+#loop-steps li[data-step="4"] .num { color: var(--lp-ink, var(--sky-ink, #0369a1)); }
+#loop-steps li[data-step="5"] .num { color: var(--lp-ink, var(--indigo-ink, #4338ca)); }
+#loop-steps li[data-step="6"] .num { color: var(--lp-ink, var(--blue-ink, #1d4ed8)); }
 #loop-steps li .num,
 #loop-steps li h3 { transition: color .45s ease; }
 #loop-steps li {
@@ -103,11 +111,36 @@
   box-shadow: 0 0 0 1px var(--line, #e2e8f0), 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .14);
 }
 #loop-steps li.is-active::before { transform: scaleY(1); }
-#loop-steps li.is-active .num { color: var(--lp-c, var(--orange, #f97316)); }
 #loop-steps li.is-active h3 { color: var(--head, #0f172a); }
-#loop-steps li[tabindex] { cursor: default; }
-#loop-steps li[tabindex]:focus { outline: none; }
-#loop-steps li[tabindex]:focus-visible { outline: 2px solid var(--lp-c, var(--sky, #0ea5e9)); outline-offset: 2px; }
+
+/* phones and portrait tablets: the ring pins under the nav while the steps scroll beneath it, and the
+   step nearest the ring lights up (the script drives this from scroll position under the same query).
+   An opaque band in the section tint, full bleed, keeps the passing steps from showing through. */
+@media (max-width: 960px) and (min-height: 600px) {
+  .loop > .widget[data-widget="loop"] {
+    position: sticky;
+    top: 76px;
+    z-index: 1;
+    width: clamp(220px, min(62vw, 40vh), 340px);
+    width: clamp(220px, min(62vw, 40svh), 340px);   /* svh: no resize while a phone's toolbar slides */
+    /* the pin releases 150px early, so the ring leaves together with Learn instead of covering it;
+       the list's matching negative margin keeps the layout exactly where it was */
+    margin-bottom: 150px;
+  }
+  #loop-steps { margin-top: -150px; }
+  [data-widget="loop"]::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    top: -16px;
+    bottom: -30px;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(to bottom, var(--bg-alt, #f8fafc) 0, var(--bg-alt, #f8fafc) calc(100% - 22px), rgba(248, 250, 252, 0) 100%);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   [data-widget="loop"] .lp-num,

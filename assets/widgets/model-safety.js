@@ -15,7 +15,6 @@
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
   function rand(a, b) { return a + Math.random() * (b - a); }
-  function easeInOut(t) { return 0.5 - 0.5 * Math.cos(Math.PI * clamp(t, 0, 1)); }
 
   /* ---------- palette, read from the page's CSS variables ---------- */
   function hexRgb(str, fb) {
@@ -121,6 +120,8 @@
     this.learn = 0.3;    /* how much the shared model has learned: drives its glow */
     this.energy = 0;     /* short pulse when a signal arrives */
     this.arrivals = 0;
+    this.ring = -1;      /* broadcast ring progress (0..1), -1 when idle */
+    this.bcT = 1;        /* seconds until the shared model next sends what it learned back out */
     this.inb = [];
     this.outb = [];
     this.sparks = [];
@@ -303,26 +304,37 @@
     var dur = n.mine ? rand(4.2, 5) : rand(4.4, 6.2);
     this.inb.push({ n: ni, k: kind, d: (progress || 0) * n.path.L, v: n.path.L / dur, len: this.small ? 34 : 42 });
   };
-  WorldModel.prototype.spawnOut = function (ni, progress) {
-    this.outb.push({ n: ni, t: progress || 0, dur: rand(2.6, 3.2) });
+  WorldModel.prototype.spawnOut = function (ni, progress, dur) {
+    this.outb.push({ n: ni, t: progress || 0, dur: dur || 2.3 });
+  };
+  /* one learned update, sent to every personal model at once: a sky ring leaves the core,
+     then a comet runs down every channel and lands on every node together */
+  var BC_EVERY = 4.8, BC_DUR = 2.3, BC_DELAY = 0.16;
+  WorldModel.prototype.broadcast = function () {
+    this.ring = 0;
+    this.energy = Math.min(1.2, this.energy + 0.25);
+    for (var i = 0; i < this.nodes.length; i++) this.spawnOut(i, -BC_DELAY / BC_DUR, BC_DUR);
   };
 
   WorldModel.prototype.seedStatic = function (full) {
-    /* a complete, calm frame: signals mid-flight, refinement on its way out */
-    this.inb = []; this.outb = [];
-    var N = this.nodes.length;
-    for (var i = 0; i < N; i++) {
-      var p = ((i * 0.37) % 1) * 0.75 + 0.12;
+    /* a complete, calm frame: signals mid-flight, a learned update on its way back out */
+    this.inb = []; this.outb = []; this.ring = -1;
+    var N = this.nodes.length, i;
+    for (i = 0; i < N; i++) {
+      /* inbound traces sit on the outer half of each channel, clear of the returning comets */
+      var p = full ? 0.1 + 0.3 * ((i * 0.37) % 1) : ((i * 0.37) % 1) * 0.75 + 0.12;
       this.spawnIn(i, p);
       if (full) { this.nodes[i].s = 0.55 + 0.45 * ((i * 0.618) % 1); }
     }
-    this.spawnOut(Math.floor(N * 0.6), 0.4);
     if (full) {
+      for (i = 0; i < N; i++) this.spawnOut(i, 0.36, BC_DUR);
       this.nodes[0].s = 1;
-      this.spawnOut(0, 0.55);
-      this.spawnOut(Math.floor(N * 0.4), 0.35);
-      this.spawnOut(Math.floor(N * 0.75), 0.7);
       this.learn = 1;
+    } else {
+      /* the first update is already leaving the core when the figure comes into view */
+      for (i = 0; i < N; i++) this.spawnOut(i, 0.12, BC_DUR);
+      this.ring = 0.3;
+      this.bcT = BC_EVERY - BC_DUR * 0.12;
     }
   };
 
@@ -333,7 +345,7 @@
       var n = nodes[i];
       n.timer -= dt;
       if (n.timer <= 0) { this.spawnIn(i, 0); n.timer = n.mine ? rand(2.4, 3.6) : rand(3.4, 7.5); }
-      n.f = Math.max(0, n.f - dt * 0.9);
+      n.f = Math.max(0, n.f - dt * 1.25);
       if (n.s > 0.42) n.s = Math.max(0.42, n.s - dt * 0.012);
     }
     for (i = this.inb.length - 1; i >= 0; i--) {
@@ -344,6 +356,9 @@
         this.arrive(p);
       }
     }
+    this.bcT -= dt;
+    if (this.bcT <= 0) { this.bcT += BC_EVERY; this.broadcast(); }
+    if (this.ring >= 0) { this.ring += dt / 0.9; if (this.ring >= 1) this.ring = -1; }
     for (i = this.outb.length - 1; i >= 0; i--) {
       var o = this.outb[i];
       o.t += dt / o.dur;
@@ -371,11 +386,6 @@
       if (dd < bd) { bd = dd; best = j; }
     }
     if (best >= 0) this.latFlash[best] = 1;
-    /* every few arrivals, the shared model sends refinement back out */
-    if (this.arrivals % 2 === 1) {
-      var target = Math.random() < 0.24 ? 0 : 1 + ((Math.random() * (this.nodes.length - 1)) | 0);
-      this.spawnOut(target, 0);
-    }
   };
 
   WorldModel.prototype.draw = function () {
@@ -501,33 +511,67 @@
     ctx.beginPath(); ctx.arc(cx, cy, Rc * 1.36, 0, TAU); ctx.stroke();
     ctx.restore();
 
-    /* refinement going back out to each personal model (sky) */
+    /* the learned update leaving the core: one sky ring, easing outwards */
+    if (this.ring >= 0) {
+      var rg = this.ring, re = 1 - (1 - rg) * (1 - rg) * (1 - rg);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = rgba(SKY, 0.55 * (1 - rg));
+      ctx.beginPath(); ctx.arc(cx, cy, Rc * (1.12 + 0.5 * re), 0, TAU); ctx.stroke();
+    }
+
+    /* ...then sky comets run back down every channel to each personal model.
+       Tails are batched by quantised opacity, heads by fade, to keep draw calls low. */
+    var OL = 8, ob = this.obuckets || (this.obuckets = []), heads = this.oheads || (this.oheads = []);
+    for (j = 0; j < OL; j++) { if (ob[j]) ob[j].length = 0; else ob[j] = []; if (heads[j]) heads[j].length = 0; else heads[j] = []; }
+    var tl = this.small ? 38 : 48, segs = 12, hr = this.small ? 3 : 3.5, gr = this.small ? 7 : 8.5;
     for (i = 0; i < this.outb.length; i++) {
       var o = this.outb[i];
+      if (o.t <= 0) continue;
       n = nodes[o.n];
-      var pth = n.path, tt = easeInOut(o.t);
-      var hd = pth.L * (1 - tt);
-      var tl = 30;
-      var fade = Math.min(1, o.t * 6) * Math.min(1, (1 - o.t) * 8 + 0.25);
-      var segs = 10, px0 = null, py0 = null;
-      ctx.lineWidth = 2;
+      /* bursts out of the core, then lands with some speed left (no docking beside the node) */
+      var ot = clamp(o.t, 0, 1), it = 1 - ot;
+      var tt = 0.4 * ot + 0.6 * (1 - it * it);
+      var pth = n.path, hd = pth.L * (1 - tt);
+      var fade = Math.min(1, ot * 7) * Math.min(1, it * 9);
+      if (fade <= 0.02) continue;
+      var px0 = null, py0 = null;
       for (j = 0; j <= segs; j++) {
         var uu = j / segs, dd = hd + uu * tl;
         if (dd > pth.L) break;
         pathAt(pth, dd, q);
         if (px0 !== null) {
-          ctx.strokeStyle = rgba(SKY, fade * (1 - uu) * 0.85);
-          ctx.beginPath(); ctx.moveTo(px0, py0); ctx.lineTo(q[0], q[1]); ctx.stroke();
+          var oa = fade * (1 - uu + 0.5 / segs);
+          if (oa > 0.03) ob[Math.min(OL - 1, Math.floor(oa * OL))].push(px0, py0, q[0], q[1]);
         }
         px0 = q[0]; py0 = q[1];
       }
       pathAt(pth, hd, q);
-      ctx.fillStyle = rgba(SKY, 0.14 * fade);
-      ctx.beginPath(); ctx.arc(q[0], q[1], 7, 0, TAU); ctx.fill();
-      ctx.fillStyle = rgba(BG, fade);
-      ctx.strokeStyle = rgba(SKY, fade);
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(q[0], q[1], 2.6, 0, TAU); ctx.fill(); ctx.stroke();
+      heads[Math.min(OL - 1, Math.floor(fade * OL))].push(q[0], q[1]);
+    }
+    ctx.lineWidth = 2.25;
+    for (j = 0; j < OL; j++) {
+      var obk = ob[j];
+      if (!obk.length) continue;
+      ctx.strokeStyle = rgba(SKY, (j + 1) / OL * 0.9);
+      ctx.beginPath();
+      for (k = 0; k < obk.length; k += 4) { ctx.moveTo(obk[k], obk[k + 1]); ctx.lineTo(obk[k + 2], obk[k + 3]); }
+      ctx.stroke();
+    }
+    for (j = 0; j < OL; j++) {
+      var hk = heads[j];
+      if (!hk.length) continue;
+      var hf = (j + 1) / OL;
+      ctx.fillStyle = rgba(SKY, 0.16 * hf);
+      ctx.beginPath();
+      for (k = 0; k < hk.length; k += 2) { ctx.moveTo(hk[k] + gr, hk[k + 1]); ctx.arc(hk[k], hk[k + 1], gr, 0, TAU); }
+      ctx.fill();
+      ctx.beginPath();
+      for (k = 0; k < hk.length; k += 2) { ctx.moveTo(hk[k] + hr, hk[k + 1]); ctx.arc(hk[k], hk[k + 1], hr, 0, TAU); }
+      ctx.fillStyle = rgba(BG, hf);
+      ctx.fill();
+      ctx.lineWidth = 1.75;
+      ctx.strokeStyle = rgba(SKY, hf);
+      ctx.stroke();
     }
 
     /* personal models: soft rings that come into focus as refinement arrives */
@@ -540,6 +584,12 @@
       if (n.mine) {
         ctx.fillStyle = rgba(OR, 0.08 + 0.06 * n.f);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + 13, 0, TAU); ctx.fill();
+      }
+      /* the update lands: a sky ring opens around the personal model (0.8 s) */
+      var ff = n.f, fe = 1 - ff, rr = r + 3 + (1 - fe * fe) * 8;
+      if (ff > 0.01 && !n.mine) { /* (no sky wash over the orange halo of your model: it would turn grey) */
+        ctx.fillStyle = rgba(SKY, 0.1 * ff);
+        ctx.beginPath(); ctx.arc(n.x, n.y, rr, 0, TAU); ctx.fill();
       }
       ctx.fillStyle = rgba(BG, 1);
       ctx.beginPath(); ctx.arc(n.x, n.y, r + spread + 1.5, 0, TAU); ctx.fill();
@@ -555,15 +605,12 @@
         ctx.strokeStyle = rgba(OR, 0.38);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + 6.5, 0, TAU); ctx.stroke();
       }
-      if (n.f > 0.01) {
-        var ff = n.f, rr = r + 2 + (1 - ff) * 12;
-        ctx.lineWidth = 1.25;
-        ctx.strokeStyle = rgba(SKY, 0.7 * ff * ff);
+      if (ff > 0.01) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = rgba(SKY, 0.75 * ff);
         ctx.beginPath(); ctx.arc(n.x, n.y, rr, 0, TAU); ctx.stroke();
       }
     }
-    var lo = (0.88 + 0.12 * nodes[0].f).toFixed(2);
-    if (lo !== this._lo) { this._lo = lo; this.lblYours.style.opacity = lo; }
   };
 
   WorldModel.prototype.resize = function () {
@@ -685,7 +732,8 @@
       '</g>';
     /* labels */
     s += '<text class="ms-sf-t ms-sf-title" x="' + (x0 + 12) + '" y="' + (yT - 6) + '">Size of action</text>';
-    s += '<text class="ms-sf-t ms-sf-red" x="' + (x1 - 1) + '" y="' + (yLim - 9) + '" text-anchor="end">Fixed limit</text>';
+    s += '<rect class="ms-sf-plate" data-r="plate" rx="4"/>';
+    s += '<text class="ms-sf-t ms-sf-red" data-r="limit" x="' + (x1 - 1) + '" y="' + (yLim - 9) + '" text-anchor="end">Fixed limit</text>';
     s += '<text class="ms-sf-t" x="' + px0 + '" y="' + (yB + 24) + '">Low</text>';
     s += '<text class="ms-sf-t ms-sf-title" x="' + midX + '" y="' + (yB + 24) + '" text-anchor="middle">Certainty</text>';
     s += '<text class="ms-sf-t" x="' + px1 + '" y="' + (yB + 24) + '" text-anchor="end">High</text>';
@@ -696,7 +744,18 @@
     var r = {};
     Array.prototype.forEach.call(this.svg.querySelectorAll('[data-r]'), function (n) { r[n.getAttribute('data-r')] = n; });
     this.r = r;
+    this.plate(x1, yT, yLim);
     return true;
+  };
+  /* size the white plate under "Fixed limit" from the rendered text (4px clear on every side) */
+  Safety.prototype.plate = function (x1, yT, yLim) {
+    var r = this.r, bb = null;
+    try { bb = r.limit.getBBox(); } catch (e) { bb = null; }
+    var tw = bb && bb.width > 0 ? bb.width : 90, ty = bb && bb.height > 0 ? bb.y : yLim - 20, th = bb && bb.height > 0 ? bb.height : 13;
+    var top = Math.max(yT + 3, Math.floor(ty) - 3), bot = Math.min(yLim - 2.5, Math.ceil(ty + th) + 2);
+    var right = x1, left = Math.floor(x1 - 1 - tw) - 4;
+    r.plate.setAttribute('x', left); r.plate.setAttribute('y', top);
+    r.plate.setAttribute('width', Math.max(0, right - left)); r.plate.setAttribute('height', Math.max(0, bot - top));
   };
   Safety.prototype.place = function (c) {
     var r = this.r, g = this.g;
@@ -787,6 +846,9 @@
 
     widgets.forEach(function (w) { reduced() ? w.renderStatic() : w.resize(); });
 
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { widgets.forEach(function (w) { if (w instanceof Safety) w.resize(); }); });
+    }
     document.addEventListener('visibilitychange', kick);
     document.addEventListener('site:unlocked', function () {
       widgets.forEach(function (w) { reduced() ? w.renderStatic() : w.resize(); });

@@ -56,12 +56,10 @@
   function lerp3(a, b, k) { return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }
   function rgb(c) { return Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]); }
 
-  /* ---------- shared sprites (soft radial fills, normal compositing) ---------- */
-  var SPR = null;
-  function sprite(col, kind) {
-    var S = 128, c = document.createElement('canvas');
-    c.width = c.height = S;
-    var g = c.getContext('2d'), gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  /* ---------- shared sprites: one 3x3 atlas of soft radial fills (normal compositing) ---------- */
+  var SPR = null, ATLAS = null, SS = 128;
+  function paintSprite(g, ox, oy, col, kind) {
+    var h = SS / 2, gr = g.createRadialGradient(ox + h, oy + h, 0, ox + h, oy + h, h);
     col = rgb(col);
     if (kind === 'halo') {
       gr.addColorStop(0, 'rgba(' + col + ',.9)');
@@ -79,25 +77,72 @@
       gr.addColorStop(1, 'rgba(' + col + ',0)');
     }
     g.fillStyle = gr;
-    g.fillRect(0, 0, S, S);
-    return c;
+    g.fillRect(ox, oy, SS, SS);
+    return { sx: ox, sy: oy };
   }
   function sprites() {
     if (SPR) return SPR;
-    var P0 = palette();
-    SPR = {
-      hS: sprite(P0.sky, 'halo'), hO: sprite(P0.orange, 'halo'), hA: sprite(P0.amber, 'halo'),
-      zR: sprite(P0.red, 'haze'), zS: sprite(P0.slate, 'haze'), zK: sprite(P0.sky, 'haze'),
-      bA: sprite(P0.amber, 'bokeh'), bS: sprite(P0.sky, 'bokeh'), bO: sprite(P0.orange, 'bokeh')
-    };
+    var P0 = palette(), list = [
+      ['hS', P0.sky, 'halo'], ['hO', P0.orange, 'halo'], ['hA', P0.amber, 'halo'],
+      ['zR', P0.red, 'haze'], ['zS', P0.slate, 'haze'], ['zK', P0.sky, 'haze'],
+      ['bA', P0.amber, 'bokeh'], ['bS', P0.sky, 'bokeh'], ['bO', P0.orange, 'bokeh']
+    ];
+    ATLAS = document.createElement('canvas');
+    ATLAS.width = ATLAS.height = SS * 3;
+    var g = ATLAS.getContext('2d');
+    SPR = {};
+    list.forEach(function (it, k) { SPR[it[0]] = paintSprite(g, (k % 3) * SS, Math.floor(k / 3) * SS, it[1], it[2]); });
     return SPR;
   }
+  function blit(ctx, sp, x, y, w, h) { ctx.drawImage(ATLAS, sp.sx, sp.sy, SS, SS, x, y, w, h); }
+
+  /* ---------- style strings, built once per colour and alpha step ---------- */
+  var WQ = 5, DQ = 9, AQ = 64, AQ1 = AQ + 1;
+  var COL = null, CID = null, STR = [];
+  function colours() {
+    if (COL) return CID;
+    var P0 = palette();
+    COL = []; CID = {};
+    function add(c) { COL.push(rgb(c)); return COL.length - 1; }
+    var wi, di;
+    CID.cell = COL.length;
+    for (wi = 0; wi < WQ; wi++) for (di = 0; di < DQ; di++) add(lerp3(lerp3(P0.orange, P0.amber, .15 + .85 * wi / (WQ - 1)), P0.slate, di / (DQ - 1)));
+    CID.nuc = COL.length;
+    for (wi = 0; wi < WQ; wi++) for (di = 0; di < DQ; di++) add(lerp3(lerp3(P0.deep, P0.orange, .6 * wi / (WQ - 1)), P0.slate, di / (DQ - 1)));
+    CID.sig = COL.length;
+    for (di = 0; di < DQ; di++) add(lerp3(P0.sky, P0.slate, di / (DQ - 1)));
+    CID.slate = add(P0.slate);
+    CID.line2 = add(P0.line2);
+    CID.hue = [add(P0.orange), add(P0.amber), add(P0.sky)];
+    return CID;
+  }
+  /* key = colour id * (AQ + 1) + alpha step */
+  function aStep(a, r) {
+    /* r: alpha resolution of a group (a divisor of AQ); tiny or very numerous marks use coarser steps */
+    if (!r || r === AQ) return Math.round(clamp(a, 0, 1) * AQ);
+    return Math.round(clamp(a, 0, 1) * r) * (AQ / r);
+  }
+  function styleOf(key) {
+    return STR[key] || (STR[key] = 'rgba(' + COL[(key / AQ1) | 0] + ',' + ((key % AQ1) / AQ) + ')');
+  }
+  /* geometry grouped by style: one path and one fill or stroke per group */
+  function Batch(n) { this.n = n; this.m = {}; this.keys = []; }
+  Batch.prototype.reset = function () {
+    for (var i = 0; i < this.keys.length; i++) this.m[this.keys[i]].length = 0;
+    this.keys.length = 0;
+  };
+  Batch.prototype.at = function (key) {
+    var a = this.m[key];
+    if (!a) a = this.m[key] = [];
+    if (!a.length) this.keys.push(key);
+    return a;
+  };
 
   /* ---------- one field per canvas ---------- */
   function Field(cv) {
     var ctx = cv.getContext('2d');
     var calm = cv.getAttribute('data-mode') === 'calm';
-    var sp = sprites();
+    var sp = null, CI = colours();
     var W = 0, H = 0, dpr = 1, mobile = false, s = 60, gain = calm ? .42 : 1, PLc = palette();
     var cells = [], links = [], back = [], backPath = null, bokeh = [];
     var srcPos = [], Ts = [], Tb = [], Tk = [], maxT = 1, speed = 100, P = calm ? 6.2 : 4.2;
@@ -135,8 +180,10 @@
       var r = cv.getBoundingClientRect();
       W = Math.max(1, Math.round(r.width));
       H = Math.max(1, Math.round(r.height));
+      /* the art is soft (halos, hazes, bokeh): cap the backing store, hairlines stay crisp */
+      var budget = calm ? 3e6 : 4.2e6;
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (W * H * dpr * dpr > 7.5e6) dpr = Math.max(1, Math.sqrt(7.5e6 / (W * H)));
+      if (W * H * dpr * dpr > budget) dpr = Math.max(1, Math.sqrt(budget / (W * H)));
       cv.width = Math.round(W * dpr);
       cv.height = Math.round(H * dpr);
       mobile = W < 760;
@@ -156,7 +203,7 @@
           if (h3 > keep(x, y)) continue;
           var big = h5 > .93 ? 1.4 : 1;
           cells.push({
-            bx: x, by: y, x: x, y: y, w: weight(x, y),
+            bx: x, by: y, x: x, y: y, w: weight(x, y), w0: 0, wi: Math.round(h3 * (WQ - 1)),
             r: s * (.12 + .075 * h4) * big * (calm ? .85 : 1), ay: .74 + .26 * h5, rot: h1 * TAU,
             p1: h2 * TAU, p2: h4 * TAU, fq: .7 + .6 * h3, jit: (h5 - .5) * .07,
             nb: [], d: 0, rw: 0, fl: 0, pass: 0, act: 0, tau: 9,
@@ -180,7 +227,7 @@
           var bb = cand[c][1], lo = Math.min(a, bb), hi = Math.max(a, bb), key = lo * 4096 + hi;
           if (seen[key]) continue;
           seen[key] = 1;
-          links.push({ a: lo, b: hi, c: (hash(lo, hi) - .5) * .44, w: (cells[lo].w + cells[hi].w) / 2 });
+          links.push({ a: lo, b: hi, c: (hash(lo, hi) - .5) * .44, w: 0 });
           cells[lo].nb.push(hi); cells[hi].nb.push(lo);
         }
       }
@@ -190,7 +237,6 @@
         : mobile ? [[.82, .1], [1.08, .42], [.12, .04]]
         : [[.8, .3], [1.06, .82], [.6, -.06]];
       srcPos = sp0.map(function (p) { return [p[0] * W, p[1] * H]; });
-      speed = speed;
       Ts = srcPos.map(function (p) {
         var best = 0, bd = Infinity;
         for (var i = 0; i < n; i++) {
@@ -218,7 +264,7 @@
           var bx = -bm + i * bs + (j & 1 ? bs * .5 : 0) + (g1 - .5) * bs * .8;
           var by = -bm + j * brow + (g2 - .5) * bs * .8;
           if (g3 > (calm ? .55 : .7)) continue;
-          back.push({ x: bx, y: by, w: weight(bx, by), r: .8 + g1 * 1.1, j: (g2 - .5) * .1, k: g3 < .3 ? 0 : g3 < .52 ? 1 : 2 });
+          back.push({ x: bx, y: by, w: weight(bx, by), w0: 0, r: .8 + g1 * 1.1, j: (g2 - .5) * .1, k: g3 < .3 ? 0 : g3 < .52 ? 1 : 2 });
         }
       }
       Tb = srcPos.map(function (p) {
@@ -254,11 +300,52 @@
       }
       Tk = srcPos.map(function (p) { return bokeh.map(function (b) { return Math.hypot(b.x - p[0], b.y - p[1]) * 1.15 / speed; }); });
 
+      cells.forEach(function (c) { c.w0 = c.w; });
+      back.forEach(function (p) { p.w0 = p.w; });
+      clearHeadline();
+
       if (t < maxT + 2 * P) t = maxT + 2 * P + (calm ? 1.3 : .6);
       ev.st = 'idle';
       ev.until = t + (calm ? 8 : 2.5);
       cells.forEach(function (c) { c.d = 0; c.rw = 0; c.fl = 0; });
     }
+
+    /* hero only: a soft clear zone around the headline's glyphs so the type sits on calm ground */
+    function clearHeadline() {
+      var rects = [], h1 = calm ? null : cv.parentNode && cv.parentNode.querySelector('h1');
+      if (h1 && document.createRange) {
+        var rg = document.createRange(), cr = cv.getBoundingClientRect();
+        rg.selectNodeContents(h1);
+        var rs = rg.getClientRects();
+        for (var i = 0; i < rs.length; i++) {
+          if (rs[i].width < 1 || rs[i].height < 1) continue;
+          rects.push([rs[i].left - cr.left, rs[i].top - cr.top, rs[i].right - cr.left, rs[i].bottom - cr.top]);
+        }
+      }
+      function f(x, y) {
+        if (!rects.length) return 1;
+        var dm = Infinity;
+        for (var k = 0; k < rects.length; k++) {
+          var r = rects[k], dx = Math.max(r[0] - x, 0, x - r[2]), dy = Math.max(r[1] - y, 0, y - r[3]);
+          var d = Math.sqrt(dx * dx + dy * dy);
+          if (d < dm) dm = d;
+        }
+        return .15 + .85 * sm(0, 48, dm);
+      }
+      for (var j = 0; j < cells.length; j++) { var c = cells[j]; c.clr = f(c.bx, c.by); c.w = c.w0 * c.clr; }
+      for (j = 0; j < links.length; j++) {
+        var lk = links[j], a = cells[lk.a], b = cells[lk.b];
+        var mid = rects.length ? f((a.bx + b.bx) / 2, (a.by + b.by) / 2) : 1;
+        lk.w0 = (a.w0 + b.w0) / 2;
+        lk.w = lk.w0 * Math.min(a.clr, b.clr, mid);
+      }
+      for (j = 0; j < back.length; j++) back[j].w = back[j].w0 * (rects.length ? .3 + .7 * (f(back[j].x, back[j].y) - .15) / .85 : 1);
+    }
+    this.reclear = function () {
+      if (calm || W < 2 || !cells.length) return;
+      clearHeadline();
+      if (shown && !running) { if (isReduced()) renderStatic(); else { update(0); render(); } }
+    };
 
     function dijkstra(src) {
       var n = cells.length, D = new Float64Array(n), done = new Uint8Array(n);
@@ -389,28 +476,52 @@
       out[1] = v * v * y0 + 2 * v * u * cy + u * u * y1;
     }
     var pt = [0, 0];
+    /* per-style batches, reused every frame */
+    var bBand = new Batch(6), bBroken = new Batch(6), bWake = new Batch(6), bStreak = new Batch(6), bHead = new Batch(3),
+      bFill = new Batch(5), bMem = new Batch(5), bRing = new Batch(5), bFlash = new Batch(3), bNuc = new Batch(3), bBack = new Batch(3);
+    var STREAK = 5;
+    function flush(B, doFill) {
+      for (var k = 0; k < B.keys.length; k++) {
+        var key = B.keys[k], L = B.m[key], n = L.length, j;
+        if (!n) continue;
+        ctx.beginPath();
+        if (B.n === 6) {
+          for (j = 0; j < n; j += 6) { ctx.moveTo(L[j], L[j + 1]); ctx.quadraticCurveTo(L[j + 2], L[j + 3], L[j + 4], L[j + 5]); }
+        } else if (B.n === 5) {
+          for (j = 0; j < n; j += 5) { ctx.moveTo(L[j] + L[j + 2] * Math.cos(L[j + 4]), L[j + 1] + L[j + 2] * Math.sin(L[j + 4])); ctx.ellipse(L[j], L[j + 1], L[j + 2], L[j + 3], L[j + 4], 0, TAU); }
+        } else {
+          for (j = 0; j < n; j += 3) { ctx.moveTo(L[j] + L[j + 2], L[j + 1]); ctx.arc(L[j], L[j + 1], L[j + 2], 0, TAU); }
+        }
+        if (doFill) { ctx.fillStyle = styleOf(key); ctx.fill(); } else { ctx.strokeStyle = styleOf(key); ctx.stroke(); }
+      }
+      B.reset();
+    }
+    function addQuad(B, cid, a, x0, y0, cx, cy, x1, y1, r) {
+      var st = aStep(a, r);
+      if (!st) return;
+      B.at(cid * AQ1 + st).push(x0, y0, cx, cy, x1, y1);
+    }
+    function dIdx(d, e1) { return d > .01 ? Math.round(sm(0, e1, d) * (DQ - 1)) : 0; }
+    function sprAlpha(a) { a = q(a); return a < .006 ? 0 : a; }
 
     function render() {
-      var PL = palette();
+      if (!sp) sp = sprites();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, W, H);
       var camX = ev.camX || 0, camY = ev.camY || 0;
-      var i, w, c, a, b;
-      var SKY = rgb(PL.sky), SLATE = rgb(PL.slate), LINE = rgb(PL.slate);
+      var i, w, c, a, b, ga;
 
       /* --- back layer: a fine, colourful particle field (the site's signature) --- */
       ctx.save();
       ctx.translate(camX * .45, camY * .45);
-      ctx.strokeStyle = 'rgba(' + rgb(PL.line2) + ',' + (calm ? .22 : .3) + ')';
+      ctx.strokeStyle = styleOf(CI.line2 * AQ1 + aStep(calm ? .22 : .3));
       ctx.lineWidth = .6;
       ctx.stroke(backPath);
       var srcB = [];
       for (w = 0; w < NW; w++) srcB.push(srcOf(kmin + w));
       /* 3 hues x 4 levels, one path each */
-      var buckets = [];
-      for (i = 0; i < 12; i++) buckets.push([]);
       var haloB = [];
       for (i = 0; i < back.length; i++) {
         var bp = back[i], act = 0;
@@ -420,24 +531,16 @@
           a = tt < 0 ? .2 * Math.exp(tt * 14) : Math.exp(-tt * 1.8);
           if (a > act) act = a;
         }
-        var lv = bp.w * (.3 + .7 * act);
-        buckets[bp.k * 4 + Math.min(3, Math.floor(lv * 4))].push(bp);
+        var lev = Math.min(3, Math.floor(bp.w * (.3 + .7 * act) * 4));
+        bBack.at(CI.hue[bp.k] * AQ1 + aStep((.16 + lev * .17) * gain)).push(bp.x, bp.y, bp.r * (1 + lev * .12));
         if (act > .35 && bp.w > .35 && bp.k === 2) haloB.push(bp, act);
       }
-      var hues = [PL.orange, PL.amber, PL.sky];
-      for (var bk = 0; bk < 12; bk++) {
-        var list = buckets[bk];
-        if (!list.length) continue;
-        var lev = bk % 4;
-        ctx.fillStyle = 'rgba(' + rgb(hues[(bk / 4) | 0]) + ',' + q((.16 + lev * .17) * gain) + ')';
-        ctx.beginPath();
-        for (i = 0; i < list.length; i++) { var rr0 = list[i].r * (1 + lev * .12); ctx.moveTo(list[i].x + rr0, list[i].y); ctx.arc(list[i].x, list[i].y, rr0, 0, TAU); }
-        ctx.fill();
-      }
+      flush(bBack, true);
       for (i = 0; i < haloB.length; i += 2) {
         var gp = haloB[i], gs = 4 + gp.r * 4;
-        ctx.globalAlpha = q(haloB[i + 1] * gp.w * .22 * gain);
-        ctx.drawImage(sp.hS, gp.x - gs, gp.y - gs, gs * 2, gs * 2);
+        if (!(ga = sprAlpha(haloB[i + 1] * gp.w * .22 * gain))) continue;
+        ctx.globalAlpha = ga;
+        blit(ctx, sp.hS, gp.x - gs, gp.y - gs, gs * 2, gs * 2);
       }
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -451,14 +554,14 @@
       if (ev.amt > .01) {
         var hz = ev.R * 1.55, wv = weight(ev.cx, ev.cy);
         ctx.globalAlpha = q(.16 * ev.amt * gain * wv);
-        ctx.drawImage(sp.zR, ev.cx - hz, ev.cy - hz, hz * 2, hz * 2);
+        blit(ctx, sp.zR, ev.cx - hz, ev.cy - hz, hz * 2, hz * 2);
         ctx.globalAlpha = q(.22 * ev.amt * gain * wv);
-        ctx.drawImage(sp.zS, ev.cx - hz * .8, ev.cy - hz * .8, hz * 1.6, hz * 1.6);
+        blit(ctx, sp.zS, ev.cx - hz * .8, ev.cy - hz * .8, hz * 1.6, hz * 1.6);
         ctx.globalAlpha = 1;
       }
 
-      /* resting links: fine slate hairlines, three bands */
-      var bands = [new Path2D(), new Path2D(), new Path2D()];
+      /* resting links: fine slate hairlines in three bands; links inside a patch that has lost step break up */
+      var bandA = [.14, .26, .38];
       for (i = 0; i < L; i++) {
         lk = links[i]; a = cells[lk.a]; b = cells[lk.b];
         var mx = (a.x + b.x) / 2 - (b.y - a.y) * lk.c, my = (a.y + b.y) / 2 + (b.x - a.x) * lk.c;
@@ -467,28 +570,21 @@
         lk.x0 = a.x + ex / el * a.r * 1.18; lk.y0 = a.y + ey / el * a.r * 1.18;
         ex = mx - b.x; ey = my - b.y; el = Math.sqrt(ex * ex + ey * ey) || 1;
         lk.x1 = b.x + ex / el * b.r * 1.18; lk.y1 = b.y + ey / el * b.r * 1.18;
-        var dl0 = (a.d + b.d) / 2;
-        if (dl0 > .25) continue; /* drawn broken below */
-        var bandIdx = lk.w < .35 ? 0 : lk.w < .7 ? 1 : 2;
-        bands[bandIdx].moveTo(lk.x0, lk.y0);
-        bands[bandIdx].quadraticCurveTo(mx, my, lk.x1, lk.y1);
+        if ((a.d + b.d) / 2 > .25) addQuad(bBroken, CI.slate, .42 * lk.w * gain, lk.x0, lk.y0, mx, my, lk.x1, lk.y1);
+        else {
+          var bw0 = lk.w0;
+          var bandIdx = bw0 < .35 ? 0 : bw0 < .7 ? 1 : 2;
+          /* near the headline the band fades with the link */
+          addQuad(bBand, CI.slate, bandA[bandIdx] * gain * (lk.w / (bw0 || 1)), lk.x0, lk.y0, mx, my, lk.x1, lk.y1, 32);
+        }
       }
       ctx.lineWidth = 1;
-      var bandA = [.14, .26, .38];
-      for (i = 0; i < 3; i++) { ctx.strokeStyle = 'rgba(' + LINE + ',' + q(bandA[i] * gain) + ')'; ctx.stroke(bands[i]); }
-      /* links inside a patch that has lost step break up */
+      flush(bBand, false);
       ctx.setLineDash([2, 4]);
-      for (i = 0; i < L; i++) {
-        lk = links[i]; a = cells[lk.a]; b = cells[lk.b];
-        var dl = (a.d + b.d) / 2;
-        if (dl <= .25) continue;
-        ctx.strokeStyle = 'rgba(' + SLATE + ',' + q(.42 * lk.w * gain) + ')';
-        ctx.beginPath(); ctx.moveTo(lk.x0, lk.y0); ctx.quadraticCurveTo(lk.cx, lk.cy, lk.x1, lk.y1); ctx.stroke();
-      }
+      flush(bBroken, false);
       ctx.setLineDash([]);
 
-      /* sky signals travelling along links */
-      ctx.lineCap = 'round';
+      /* sky signals travelling along links: a faint wake over the whole link and a bright streak behind the head */
       var heads = [];
       for (i = 0; i < L; i++) {
         lk = links[i]; a = cells[lk.a]; b = cells[lk.b];
@@ -505,42 +601,41 @@
           var fwd = fa <= fb;
           var uh = Math.min(p, 1), ut = Math.max(0, p - .55);
           if (!fwd) { uh = 1 - uh; ut = 1 - ut; }
-          var col = dAvg > .02 ? rgb(lerp3(PL.sky, PL.slate, sm(0, .7, dAvg))) : SKY;
-          var wake = .16 * I * Math.sin(Math.min(p / 1.5, 1) * Math.PI);
-          ctx.strokeStyle = 'rgba(' + col + ',' + q(wake) + ')';
-          ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.moveTo(lk.x0, lk.y0); ctx.quadraticCurveTo(lk.cx, lk.cy, lk.x1, lk.y1); ctx.stroke();
-          bez(lk.x0, lk.y0, lk.cx, lk.cy, lk.x1, lk.y1, ut, pt);
-          var tx = pt[0], ty = pt[1];
+          var cid = CI.sig + dIdx(dAvg, .7);
+          addQuad(bWake, cid, .16 * I * Math.sin(Math.min(p / 1.5, 1) * Math.PI), lk.x0, lk.y0, lk.cx, lk.cy, lk.x1, lk.y1);
           bez(lk.x0, lk.y0, lk.cx, lk.cy, lk.x1, lk.y1, uh, pt);
           var hx = pt[0], hy = pt[1];
-          if (Math.abs(hx - tx) + Math.abs(hy - ty) < .5) continue;
-          var gr = ctx.createLinearGradient(tx, ty, hx, hy);
-          gr.addColorStop(0, 'rgba(' + col + ',0)');
-          gr.addColorStop(1, 'rgba(' + col + ',' + q(.95 * I) + ')');
-          ctx.strokeStyle = gr;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(tx, ty);
-          for (var sg = 1; sg <= 6; sg++) {
-            bez(lk.x0, lk.y0, lk.cx, lk.cy, lk.x1, lk.y1, ut + (uh - ut) * sg / 6, pt);
-            ctx.lineTo(pt[0], pt[1]);
+          bez(lk.x0, lk.y0, lk.cx, lk.cy, lk.x1, lk.y1, ut, pt);
+          if (Math.abs(hx - pt[0]) + Math.abs(hy - pt[1]) >= .5) {
+            /* the streak brightens from tail to head in a few exact sub-curves */
+            var sx = pt[0], sy = pt[1];
+            for (var sg = 0; sg < STREAK; sg++) {
+              var u0 = ut + (uh - ut) * sg / STREAK, u1 = ut + (uh - ut) * (sg + 1) / STREAK, v0 = 1 - u0, v1 = 1 - u1;
+              var m0 = v0 * v1, m1 = v0 * u1 + u0 * v1, m2 = u0 * u1;
+              bez(lk.x0, lk.y0, lk.cx, lk.cy, lk.x1, lk.y1, u1, pt);
+              addQuad(bStreak, cid, .95 * I * (sg + .5) / STREAK, sx, sy,
+                m0 * lk.x0 + m1 * lk.cx + m2 * lk.x1, m0 * lk.y0 + m1 * lk.cy + m2 * lk.y1, pt[0], pt[1], 32);
+              sx = pt[0]; sy = pt[1];
+            }
           }
-          ctx.stroke();
           if (p <= 1) heads.push(hx, hy, I, dAvg);
         }
       }
+      ctx.lineWidth = 1;
+      flush(bWake, false);
+      ctx.lineWidth = 1.5;
+      flush(bStreak, false);
       for (i = 0; i < heads.length; i += 4) {
         var hI = heads[i + 2], hd = heads[i + 3], hs = 6;
-        if (hd < .3) {
-          ctx.globalAlpha = q(.32 * hI * (1 - hd));
-          ctx.drawImage(sp.hS, heads[i] - hs, heads[i + 1] - hs, hs * 2, hs * 2);
+        if (hd < .3 && (ga = sprAlpha(.32 * hI * (1 - hd)))) {
+          ctx.globalAlpha = ga;
+          blit(ctx, sp.hS, heads[i] - hs, heads[i + 1] - hs, hs * 2, hs * 2);
         }
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = 'rgba(' + (hd > .02 ? rgb(lerp3(PL.sky, PL.slate, sm(0, .7, hd))) : SKY) + ',' + q(.95 * hI) + ')';
-        ctx.beginPath(); ctx.arc(heads[i], heads[i + 1], 1.5, 0, TAU); ctx.fill();
+        var st = aStep(.95 * hI, 16);
+        if (st) bHead.at((CI.sig + dIdx(hd, .7)) * AQ1 + st).push(heads[i], heads[i + 1], 1.5);
       }
       ctx.globalAlpha = 1;
+      flush(bHead, true);
 
       /* cells */
       var n = cells.length;
@@ -549,56 +644,49 @@
         c = cells[i];
         if (c.act < .04 || c.x < -60 || c.x > W + 60 || c.y < -60 || c.y > H + 60) continue;
         var Ib = c.w * gain * (1 - c.d);
-        if (Ib < .02) continue;
+        if (Ib < .02 || !(ga = sprAlpha(.2 * c.act * Ib))) continue;
         var gsz = c.r * (2 + 1.5 * c.act);
-        ctx.globalAlpha = q(.2 * c.act * Ib);
-        ctx.drawImage(c.hu < .5 ? sp.hO : sp.hA, c.x - gsz, c.y - gsz, gsz * 2, gsz * 2);
+        ctx.globalAlpha = ga;
+        blit(ctx, c.hu < .5 ? sp.hO : sp.hA, c.x - gsz, c.y - gsz, gsz * 2, gsz * 2);
       }
       /* restoration: a sky flash where a wave pulls a cell back into step */
       for (i = 0; i < n; i++) {
         c = cells[i];
-        if (c.fl < .03) continue;
+        if (c.fl < .03 || !(ga = sprAlpha(.32 * c.fl * c.w * gain))) continue;
         var fz = c.r * 3.4;
-        ctx.globalAlpha = q(.32 * c.fl * c.w * gain);
-        ctx.drawImage(sp.hS, c.x - fz, c.y - fz, fz * 2, fz * 2);
+        ctx.globalAlpha = ga;
+        blit(ctx, sp.hS, c.x - fz, c.y - fz, fz * 2, fz * 2);
       }
       ctx.globalAlpha = 1;
-      ctx.lineWidth = 1;
       for (i = 0; i < n; i++) {
         c = cells[i];
         if (c.x < -60 || c.x > W + 60 || c.y < -60 || c.y > H + 60) continue;
-        var I2 = c.w * gain;
-        var base = c.d > .01 ? lerp3(c.col, PL.slate, sm(0, .85, c.d)) : c.col;
-        var cc = rgb(base);
+        var I2 = c.w * gain, di = dIdx(c.d, .85), st2;
         var br = 1 + .1 * c.act;
         var rx = c.r * br, ry = c.r * c.ay * br, rot = c.rot + t * .02 * c.fq;
+        var ccid = CI.cell + c.wi * DQ + di;
         /* cytoplasm */
-        ctx.fillStyle = 'rgba(' + cc + ',' + q((.1 + .28 * c.act) * I2 * (1 - .35 * c.d)) + ')';
-        ctx.beginPath(); ctx.ellipse(c.x, c.y, rx, ry, rot, 0, TAU); ctx.fill();
+        if ((st2 = aStep((.1 + .28 * c.act) * I2 * (1 - .35 * c.d), 32))) bFill.at(ccid * AQ1 + st2).push(c.x, c.y, rx, ry, rot);
         /* membrane */
-        ctx.strokeStyle = 'rgba(' + cc + ',' + q((.36 + .5 * c.act) * I2) + ')';
-        ctx.stroke();
+        if ((st2 = aStep((.36 + .5 * c.act) * I2, 32))) bMem.at((CI.cell + (c.wi >> 1) * 2 * DQ + di) * AQ1 + st2).push(c.x, c.y, rx, ry, rot);
         /* depolarisation ring: the sky signal leaving the cell */
         if (c.tau < 1.8) {
           var rr = c.r * 1.1 + s * .22 * (1 - Math.exp(-c.tau * 2.1));
           var ra = .42 * Math.exp(-c.tau * 2.3) * I2 * (1 - .7 * c.d);
-          if (ra > .015) {
-            ctx.strokeStyle = 'rgba(' + (c.d > .05 ? SLATE : SKY) + ',' + q(ra) + ')';
-            ctx.beginPath(); ctx.ellipse(c.x, c.y, rr, rr * (.9 + .1 * c.ay), c.rot, 0, TAU); ctx.stroke();
-          }
+          if (ra > .015 && (st2 = aStep(ra, 32))) bRing.at((c.d > .05 ? CI.slate : CI.sig) * AQ1 + st2).push(c.x, c.y, rr, rr * (.9 + .1 * c.ay), c.rot);
         }
-        if (c.fl > .03) {
-          var fr2 = c.r * 1.1 + s * .34 * (1 - c.fl);
-          ctx.strokeStyle = 'rgba(' + SKY + ',' + q(.7 * c.fl * c.w * gain) + ')';
-          ctx.lineWidth = 1.25;
-          ctx.beginPath(); ctx.arc(c.x, c.y, fr2, 0, TAU); ctx.stroke();
-          ctx.lineWidth = 1;
-        }
+        if (c.fl > .03 && (st2 = aStep(.7 * c.fl * c.w * gain))) bFlash.at(CI.sig * AQ1 + st2).push(c.x, c.y, c.r * 1.1 + s * .34 * (1 - c.fl));
         /* nucleus */
-        var nc = c.d > .01 ? lerp3(c.nuc, PL.slate, sm(0, .85, c.d)) : c.nuc;
-        ctx.fillStyle = 'rgba(' + rgb(nc) + ',' + q((.5 + .45 * c.act) * I2) + ')';
-        ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(1.1, c.r * .17) + .6 * c.act, 0, TAU); ctx.fill();
+        if ((st2 = aStep((.5 + .45 * c.act) * I2, 16))) bNuc.at((CI.nuc + (c.wi >> 1) * 2 * DQ + di) * AQ1 + st2).push(c.x, c.y, Math.max(1.1, c.r * .17) + .6 * c.act);
       }
+      flush(bFill, true);
+      ctx.lineWidth = 1;
+      flush(bMem, false);
+      flush(bRing, false);
+      ctx.lineWidth = 1.25;
+      flush(bFlash, false);
+      ctx.lineWidth = 1;
+      flush(bNuc, true);
       ctx.restore();
 
       /* --- front layer: a few big, soft cells near the lens --- */
@@ -618,7 +706,7 @@
           var bx2 = bo.x + Math.sin(t * .05 + bo.p) * s * .5, by2 = bo.y + Math.cos(t * .043 + bo.p) * s * .4;
           var bw = weight(bx2, by2);
           ctx.globalAlpha = q((.06 + .07 * ba) * bw);
-          ctx.drawImage(i % 3 === 1 ? sp.bS : i % 3 === 2 ? sp.bO : sp.bA, bx2 - bo.r, by2 - bo.r, bo.r * 2, bo.r * 2);
+          blit(ctx, i % 3 === 1 ? sp.bS : i % 3 === 2 ? sp.bO : sp.bA, bx2 - bo.r, by2 - bo.r, bo.r * 2, bo.r * 2);
         }
         ctx.restore();
       }
@@ -663,22 +751,36 @@
       }
       if (!locked && !shown) {
         shown = true;
+        if (!calm) clearHeadline();
         if (reduce) renderStatic(); else { update(1 / 60); render(); }
-        requestAnimationFrame(function () { cv.style.opacity = '1'; });
+        /* the closing field is built on approach, long after the page revealed: show it as it is, no late fade */
+        if (calm) { cv.style.transition = 'none'; cv.style.opacity = '1'; }
+        else requestAnimationFrame(function () { cv.style.opacity = '1'; });
       }
     }
     this.evaluate = evaluate;
 
-    var rt = 0, lastW = 0, lastH = 0;
+    var rt = 0, lastW = 0, lastH = 0, near = !calm;
     function relayout() {
+      if (!near) return;
       var r = cv.getBoundingClientRect();
       var nw = Math.round(r.width), nh = Math.round(r.height);
       if (nw === lastW && nh === lastH) return;
       lastW = nw; lastH = nh;
       if (!nw || !nh) return;
       build();
-      if (isReduced()) renderStatic(); else { update(1 / 60); render(); }
+      /* under the gate nothing is drawn; evaluate() paints the first frame on unlock */
+      if (shown) { if (isReduced()) renderStatic(); else { update(1 / 60); render(); } }
       evaluate();
+    }
+    /* the closing field is far down the page: build it on approach, free its pixels when far away */
+    function release() {
+      if (!lastW) return;
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      cv.width = cv.height = 0;
+      lastW = lastH = 0; W = 0;
     }
     relayout();
     if ('ResizeObserver' in window) {
@@ -691,9 +793,15 @@
         visible = es[es.length - 1].isIntersecting;
         evaluate();
       }, { rootMargin: '80px 0px' }).observe(cv);
-    }
+      if (calm) {
+        new IntersectionObserver(function (es) {
+          near = es[es.length - 1].isIntersecting;
+          if (near) relayout(); else release();
+        }, { rootMargin: '100% 0px' }).observe(cv);
+      }
+    } else { near = true; relayout(); }
     if (mqReduce) {
-      var onMQ = function () { if (isReduced()) { evaluate(); renderStatic(); } else evaluate(); };
+      var onMQ = function () { if (isReduced()) { evaluate(); if (W && shown) renderStatic(); } else evaluate(); };
       if (mqReduce.addEventListener) mqReduce.addEventListener('change', onMQ);
       else if (mqReduce.addListener) mqReduce.addListener(onMQ);
     }
@@ -715,9 +823,10 @@
   }
 
   /* ---------- boot ---------- */
+  /* under the password gate the fields are built in idle time, so typing stays responsive */
   var fields = [];
   function evalAll() { for (var i = 0; i < fields.length; i++) fields[i].evaluate(); }
-  function boot() {
+  function create() {
     var nodes = document.querySelectorAll('canvas[data-widget="hero-field"]');
     for (var i = 0; i < nodes.length; i++) {
       if (nodes[i].__heroField) continue;
@@ -727,10 +836,18 @@
     }
     evalAll();
   }
-  document.addEventListener('site:unlocked', function () { setTimeout(evalAll, 0); });
+  var idle = window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 1500 }); } : function (f) { setTimeout(f, 60); };
+  function boot() {
+    if (!isLocked()) { create(); return; }
+    idle(function () { create(); idle(sprites); });
+  }
+  document.addEventListener('site:unlocked', function () { setTimeout(create, 0); });
   document.addEventListener('visibilitychange', evalAll);
   if ('MutationObserver' in window) {
     new MutationObserver(evalAll).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { for (var i = 0; i < fields.length; i++) fields[i].reclear(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

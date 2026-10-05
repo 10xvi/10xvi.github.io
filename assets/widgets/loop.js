@@ -8,6 +8,11 @@
   var NAMES = ['Sense', 'Understand', 'Plan', 'Act', 'Verify', 'Learn'];
   var VARS = ['--red', '--orange', '--amber', '--sky', '--indigo', '--blue'];
   var FALLBACK = ['#ef4444', '#f97316', '#f59e0b', '#0ea5e9', '#6366f1', '#3b82f6'];
+  // text-safe twins of the step hues (shared -ink tokens) for small numbers on white or the tint
+  var INK_VARS = ['--red-ink', '--orange-ink', '--amber-ink', '--sky-ink', '--indigo-ink', '--blue-ink'];
+  var INK_FALLBACK = ['#b91c1c', '#c2410c', '#b45309', '#0369a1', '#4338ca', '#1d4ed8'];
+  // phones and portrait tablets: the ring pins above the list and scrolling drives the active step
+  var PIN_MQ = '(max-width: 960px) and (min-height: 600px)';
   var TAU = Math.PI * 2;
   var A0 = -Math.PI / 2;            // station 0 (Sense) at 12 o'clock
   var LEARN = 5;
@@ -71,9 +76,12 @@
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     /* ---------- palette ---------- */
-    var C = [], SLATE, LINE, LINE2, MUTED, HEAD, SKY, SKYD, BG, BGALT;
+    var C = [], INK = [], SLATE, LINE, LINE2, MUTED, HEAD, SKY, SKYD, BG, BGALT;
     function readPalette() {
-      for (var k = 0; k < 6; k++) C[k] = cssVar(VARS[k], FALLBACK[k]);
+      for (var k = 0; k < 6; k++) {
+        C[k] = cssVar(VARS[k], FALLBACK[k]);
+        INK[k] = cssVar(INK_VARS[k], INK_FALLBACK[k]);
+      }
       SLATE = cssVar('--muted', '#64748b');
       MUTED = SLATE;
       LINE = cssVar('--line', '#e2e8f0');
@@ -140,8 +148,10 @@
     function applyStepColors() {
       for (var k = 0; k < 6; k++) {
         labels[k].style.setProperty('--lp-c', rgbStr(C[k]));
+        labels[k].style.setProperty('--lp-ink', rgbStr(INK[k]));
         if (items[k]) {
           items[k].style.setProperty('--lp-c', rgbStr(C[k]));
+          items[k].style.setProperty('--lp-ink', rgbStr(INK[k]));
           items[k].style.setProperty('--lp-soft', rgba(C[k], 0.07));
           items[k].style.setProperty('--lp-soft-0', rgba(C[k], 0));
         }
@@ -150,7 +160,7 @@
     applyStepColors();
 
     /* ---------- geometry ---------- */
-    var W = 0, H = 0, dpr = 1, cx = 0, cy = 0, R = 100, r0 = 40, Rf = 120, compact = false, sc = 1, s = 1;
+    var W = 0, H = 0, dpr = 1, cx = 0, cy = 0, R = 100, r0 = 40, Rf = 120, compact = false, bare = false, sc = 1, s = 1;
     var sx = [], sy = [];
 
     function stationAngle(q) { return A0 + q * TAU / 6; }
@@ -209,6 +219,9 @@
         labels[i].style.left = lx.toFixed(1) + 'px';
         labels[i].style.top = ly.toFixed(1) + 'px';
       }
+      // a well too small for the caption (the pinned ring on phones) shows the model alone, centred
+      bare = r0 * 2 < 100;
+      mount.classList.toggle('lp-bare', bare);
       core.style.left = cx + 'px';
       core.style.top = (cy + r0 * (compact ? 0.52 : 0.56)) + 'px';
       core.style.width = Math.max(96, r0 * 1.5) + 'px';
@@ -253,9 +266,9 @@
     }
     var rc = 20, mcx = 0, mcy = 0;
     function buildModel() {
-      rc = r0 * (compact ? 0.34 : 0.4);
+      rc = r0 * (bare ? 0.5 : compact ? 0.34 : 0.4);
       mcx = cx;
-      mcy = cy - r0 * (compact ? 0.2 : 0.17);
+      mcy = bare ? cy : cy - r0 * (compact ? 0.2 : 0.17);
     }
 
     /* ---------- motion state ---------- */
@@ -279,7 +292,11 @@
       active = i;
       for (var k = 0; k < 6; k++) {
         labels[k].classList.toggle('is-active', k === i);
-        if (items[k]) items[k].classList.toggle('is-active', k === i);
+        if (items[k]) {
+          items[k].classList.toggle('is-active', k === i);
+          if (k === i) items[k].setAttribute('aria-current', 'step');
+          else items[k].removeAttribute('aria-current');
+        }
       }
     }
 
@@ -781,14 +798,18 @@
       if (reduced) return;
       if (mode === 'hold') { mode = 'dwell'; tMode = 0; }
     }
+    // pointer or focus let go: fall back to the step that scrolling has pinned, if any
+    var scrollK = -1;
+    function letGo(k) {
+      release(k);
+      if (hovering < 0 && scrollK >= 0) hoverStation(scrollK);
+    }
+    // the list stays in natural reading order: pointer hover syncs the ring, no extra tab stops
     items.forEach(function (li, k) {
-      if (!li.hasAttribute('tabindex') && !li.querySelector('a,button,input,select,textarea,[tabindex]')) {
-        li.setAttribute('tabindex', '0');
-      }
       li.addEventListener('mouseenter', function () { hoverStation(k); });
-      li.addEventListener('mouseleave', function () { if (document.activeElement !== li && !li.contains(document.activeElement)) release(k); });
+      li.addEventListener('mouseleave', function () { if (document.activeElement !== li && !li.contains(document.activeElement)) letGo(k); });
       li.addEventListener('focusin', function () { hoverStation(k); });
-      li.addEventListener('focusout', function () { if (!li.matches(':hover')) release(k); });
+      li.addEventListener('focusout', function () { if (!li.matches(':hover')) letGo(k); });
     });
     // hovering a station on the ring works the same way (pointer only)
     var ringHover = -1;
@@ -805,17 +826,53 @@
         if (d < bd) { bd = d; best = i; }
       }
       if (best !== ringHover) {
-        if (ringHover >= 0) release(ringHover);
+        if (ringHover >= 0) letGo(ringHover);
         ringHover = best;
         if (best >= 0) hoverStation(best);
       }
       mount.classList.toggle('lp-pointing', best >= 0);
     });
     mount.addEventListener('pointerleave', function () {
-      if (ringHover >= 0) release(ringHover);
+      if (ringHover >= 0) letGo(ringHover);
       ringHover = -1;
       mount.classList.remove('lp-pointing');
     });
+
+    /* ---------- pinned ring on narrow screens: scroll position drives the step ---------- */
+    var pinMq = window.matchMedia ? window.matchMedia(PIN_MQ) : null;
+    var scrollRaf = 0;
+    function scrollPick() {
+      if (!items.length || !pinMq || !pinMq.matches || locked()) return -1;
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var mr = mount.getBoundingClientRect();
+      if (mr.bottom <= 0 || mr.top >= vh) return -1;           // ring off screen
+      var ringB = mr.bottom;
+      var focusY = ringB + Math.min(140, Math.max(48, (vh - ringB) * 0.3));
+      var first = items[0].getBoundingClientRect(), lastR = items[items.length - 1].getBoundingClientRect();
+      if (first.top > focusY || lastR.bottom < ringB + 24) return -1;
+      var k = 0;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].getBoundingClientRect().top <= focusY) k = i;
+      }
+      return k;
+    }
+    function onScrollFrame() {
+      scrollRaf = 0;
+      var k = scrollPick();
+      if (k === scrollK) return;
+      var prevK = scrollK;
+      scrollK = k;
+      if (k >= 0) hoverStation(k);
+      else if (prevK >= 0) release(prevK);
+    }
+    function onScroll() { if (!scrollRaf) scrollRaf = requestAnimationFrame(onScrollFrame); }
+    if (pinMq && items.length) {
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+      var onMq = function () { onScroll(); };
+      if (pinMq.addEventListener) pinMq.addEventListener('change', onMq);
+      else if (pinMq.addListener) pinMq.addListener(onMq);
+    }
 
     /* ---------- observers ---------- */
     setActive(0);
@@ -846,7 +903,7 @@
       io.observe(mount);
     }
     document.addEventListener('visibilitychange', update);
-    document.addEventListener('site:unlocked', function () { relayout(); update(); });
+    document.addEventListener('site:unlocked', function () { relayout(); update(); onScroll(); });
     if ('MutationObserver' in window) {
       new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     }

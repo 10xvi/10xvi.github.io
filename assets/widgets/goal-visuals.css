@@ -11,7 +11,7 @@
   max-width: 100%;
 }
 [data-widget="lifespan"] > .gv-plate,
-[data-widget="morphology"] > .gv-plate {
+[data-widget="morphology"] .gv-plate {
   position: relative;
   box-sizing: border-box;
   width: 100%;
@@ -27,7 +27,7 @@
 }
 @media (max-width: 600px) {
   [data-widget="lifespan"] > .gv-plate,
-  [data-widget="morphology"] > .gv-plate { height: 232px; border-radius: 14px; }
+  [data-widget="morphology"] .gv-plate { height: 232px; border-radius: 14px; }
 }
 
 [data-widget="lifespan"] .gv-svg,
@@ -40,7 +40,7 @@
   overflow: hidden;
 }
 
-/* label system (shared) */
+/* label system (shared; the lifespan key and row labels) */
 [data-widget] .gv-svg .gv-lbl {
   font-family: var(--mono, "JetBrains Mono"), ui-monospace, Menlo, monospace;
   font-size: 11px;
@@ -50,13 +50,13 @@
   fill: var(--muted, #64748b);
 }
 [data-widget] .gv-svg .gv-lbl-hi { fill: var(--head, #0f172a); }
-[data-widget] .gv-svg .gv-lbl-o  { fill: var(--orange, #f97316); }
-[data-widget] .gv-svg .gv-lbl-s  { fill: var(--sky-deep, #0284c7); }
+/* small text uses the ink tokens (AA on white); bright hues stay for fills and strokes */
+[data-widget] .gv-svg .gv-lbl-o  { fill: var(--orange-ink, #c2410c); }
+[data-widget] .gv-svg .gv-lbl-s  { fill: var(--sky-ink, #0369a1); }
 
 /* grid language (shared): fine slate hairlines */
 [data-widget] .gv-svg .gv-grid  { fill: none; stroke: var(--line, #e2e8f0); stroke-width: 1; opacity: .75; }
 [data-widget] .gv-svg .gv-rule  { fill: none; stroke: var(--line, #e2e8f0); stroke-width: 1; }
-[data-widget] .gv-svg .gv-track { fill: var(--line, #e2e8f0); }
 
 /* lifespan */
 [data-widget="lifespan"] .gv-line   { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
@@ -80,3 +80,86 @@
 
 /* full 10X span, shown faintly before and under the growing bar */
 [data-widget="lifespan"] .gv-target { fill: rgba(249, 115, 22, .05); stroke: rgba(249, 115, 22, .5); stroke-width: 1; stroke-dasharray: 3 3; }
+
+/* morphology phase tabs: real controls laid over the plate header (44px tall).
+   Same type as the SVG labels; the bar under the active tab fills with phase progress. */
+[data-widget="morphology"] .gv-stage { position: relative; }
+[data-widget="morphology"] .gv-tabs {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 14px;
+  display: flex;
+  gap: 10px;
+  height: 44px;
+}
+[data-widget="morphology"] .gv-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  height: 44px;
+  min-width: 44px;
+  padding: 14px 8px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #64748b);
+  font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .3s ease;
+}
+[data-widget="morphology"] .gv-tab > span { display: block; margin-right: -.14em; }
+[data-widget="morphology"] .gv-tab::before,
+[data-widget="morphology"] .gv-tab::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 31px;
+  height: 3px;
+  border-radius: 1.5px;
+}
+[data-widget="morphology"] .gv-tab::before { background: var(--line, #e2e8f0); }
+[data-widget="morphology"] .gv-tab::after {
+  background: linear-gradient(90deg, var(--sky-deep, #0284c7), var(--sky, #0ea5e9));
+  transform: scaleX(var(--p, 0));
+  transform-origin: 0 50%;
+}
+[data-widget="morphology"] .gv-tab:hover { color: var(--head, #0f172a); }
+[data-widget="morphology"] .gv-tab[aria-selected="true"] { color: var(--sky-ink, #0369a1); }
+[data-widget="morphology"] .gv-tab:focus { outline: none; }
+[data-widget="morphology"] .gv-tab:focus-visible {
+  outline: 2px solid var(--sky-ink, #0369a1);
+  outline-offset: -4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-widget="morphology"] .gv-tab { transition: none; }
+}
+
+/* Windows high contrast: let text and hairlines take system colours */
+@media (forced-colors: active) {
+  [data-widget] .gv-svg text,
+  [data-widget] .gv-svg .gv-lbl,
+  [data-widget] .gv-svg .gv-lbl-hi,
+  [data-widget] .gv-svg .gv-lbl-o,
+  [data-widget] .gv-svg .gv-lbl-s { fill: CanvasText; }
+  [data-widget] .gv-svg .gv-sw { forced-color-adjust: none; }
+  [data-widget="morphology"] .gv-tab { color: ButtonText; }
+  [data-widget="morphology"] .gv-tab[aria-selected="true"] { color: Highlight; }
+  [data-widget="morphology"] .gv-tab::before { background: GrayText; forced-color-adjust: none; }
+  [data-widget="morphology"] .gv-tab::after { background: Highlight; forced-color-adjust: none; }
+  [data-widget="morphology"] .gv-tab:focus-visible { outline-color: Highlight; }
+}

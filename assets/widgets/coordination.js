@@ -27,6 +27,7 @@
   var mq = function (q) { return window.matchMedia ? window.matchMedia(q) : null; };
   var reduceMQ = mq('(prefers-reduced-motion: reduce)');
   var mobileMQ = mq('(max-width: 759px)');
+  var swipeMQ = mq('(max-width: 560px)');   // phones: the three stages become a row you swipe through
 
   function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
@@ -35,6 +36,34 @@
   function mixc(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
   function rgba(c, al) { return 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + clamp(al, 0, 1).toFixed(3) + ')'; }
   function mod(a, n) { return ((a % n) + n) % n; }
+  /* OKLab mixing: a straight sRGB lerp between mauve-slate and orange passes through tan and brown,
+     which reads as decay; OKLab keeps lightness and hue honest */
+  function toLin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function toSrgb(c) { c = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; return clamp(c * 255, 0, 255); }
+  function oklab(c) {
+    var r = toLin(c[0]), g = toLin(c[1]), b = toLin(c[2]);
+    var l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    var m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    var s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+  }
+  function fromOklab(o) {
+    var l = o[0] + 0.3963377774 * o[1] + 0.2158037573 * o[2], m = o[0] - 0.1055613458 * o[1] - 0.0638541728 * o[2], s = o[0] - 0.0894841775 * o[1] - 1.2914855480 * o[2];
+    l = l * l * l; m = m * m * m; s = s * s * s;
+    return [toSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), toSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s), toSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)];
+  }
+  function mixOK(a, b, t) { var A = oklab(a), B = oklab(b); return fromOklab([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]); }
+  /* colour c at alpha al as it appears over bg (opaque) */
+  function over(c, al, bg) { return mixc(bg, c, al); }
+  /* back to a translucent colour that shows as P over bg, using at least alpha a */
+  function under(P, a, bg) {
+    for (var k = 0; k < 3; k++) if (bg[k] > 0 && P[k] < bg[k]) a = Math.max(a, 1 - P[k] / bg[k]);
+    a = clamp(a, 0.001, 1);
+    return rgba([(P[0] - (1 - a) * bg[0]) / a, (P[1] - (1 - a) * bg[1]) / a, (P[2] - (1 - a) * bg[2]) / a], a);
+  }
+  /* coherence c: lost -> neutral -> warm, so a cell first desaturates and then warms */
+  function via(lost, neut, warm, c) { return c < 0.5 ? mixOK(lost, neut, c * 2) : mixOK(neut, warm, (c - 0.5) * 2); }
+  var CQ = 10, VQ = 12, FQ = 8;           // quantisation for batched drawing
   function volt(phi) { return Math.pow(0.5 + 0.5 * Math.cos(phi), 1.6); }
   function parseColor(s, fb) {
     s = (s || '').trim();
@@ -239,21 +268,33 @@
     if (!mount.getAttribute('aria-label')) mount.setAttribute('aria-label', 'Three views of the same tissue: cells in step, cells out of step, and an incoming signal bringing them back into step.');
     mount.innerHTML = '';
     var root = document.createElement('div'); root.className = 'cw'; root.setAttribute('aria-hidden', 'true');
+    var track = document.createElement('div'); track.className = 'cw-track'; root.appendChild(track);
     this.cards = []; this.heads = [];
     var i;
     for (i = 0; i < 3; i++) {
       var card = document.createElement('div'); card.className = 'cw-card';
-      root.appendChild(card); this.cards.push(card);
+      track.appendChild(card); this.cards.push(card);
     }
     var cv = document.createElement('canvas'); cv.className = 'cw-canvas';
-    root.appendChild(cv);
+    track.appendChild(cv);
     for (i = 0; i < 3; i++) {
       var h = document.createElement('div'); h.className = 'cw-head cw-s' + i;
       h.innerHTML = '<span class="cw-label"><span class="cw-num">0' + (i + 1) + '</span><span class="cw-name">' + NAMES[i] + '</span></span><span class="cw-rule"><span class="cw-fill"></span></span>';
-      root.appendChild(h); this.heads.push({ el: h, name: h.querySelector('.cw-name'), fill: h.querySelector('.cw-fill') });
+      track.appendChild(h); this.heads.push({ el: h, name: h.querySelector('.cw-name'), fill: h.querySelector('.cw-fill') });
     }
     mount.appendChild(root);
-    this.root = root; this.cv = cv; this.ctx = cv.getContext('2d');
+    // stage dots for the swipe layout (pointer helpers; the figure itself is described by the mount's label)
+    var dots = document.createElement('div'); dots.className = 'cw-dots'; dots.setAttribute('aria-hidden', 'true');
+    this.dots = [];
+    for (i = 0; i < 3; i++) {
+      // plain elements, not buttons: the mount is role="img", which must not contain focusable controls
+      var d = document.createElement('span'); d.className = 'cw-dot cw-d' + i;
+      d.appendChild(document.createElement('span'));
+      d.addEventListener('click', this.goTo.bind(this, i));
+      dots.appendChild(d); this.dots.push(d);
+    }
+    mount.appendChild(dots);
+    this.root = root; this.track = track; this.cv = cv; this.ctx = cv.getContext('2d'); this.active = 0; this.scrollX = 0;
     this.panels = [new Panel(0), new Panel(1), new Panel(2)];
     this.T = 0; this.hiddenAt = 0; this.running = false; this.visible = false; this.W = 0; this.H = 0; this.lastFill = -1;
     this.reduce = !!(reduceMQ && reduceMQ.matches);
@@ -276,6 +317,11 @@
       }, { rootMargin: '0px' }).observe(mount);
     } else this.visible = true;
     document.addEventListener('visibilitychange', function () { self.update(); });
+    var spend = false;
+    root.addEventListener('scroll', function () {
+      if (spend) return; spend = true;
+      requestAnimationFrame(function () { spend = false; self.onScroll(); });
+    }, { passive: true });
     document.addEventListener('site:unlocked', function () { self.readColors(); self.onResize(true); self.update(); });
     if (reduceMQ) {
       var onRM = function () { self.reduce = reduceMQ.matches; self.reset(); self.render(); self.update(); };
@@ -296,17 +342,72 @@
     this.LINE2 = v('--line-2', [203, 213, 225]);
     this.HEAD = v('--head', [15, 23, 42]);
     this.ORSOFT = v('--orange-soft', [255, 247, 237]);
+    this.BG = v('--bg', [255, 255, 255]);
     // desaturated slate with a soft red tint for cells that have lost the rhythm
     this.LOST = mixc(mixc(this.MU, this.LINE2, 0.3), this.RED, 0.24);
     this.LOSTN = mixc(this.MU, this.RED, 0.2);
     this.ORD = mixc(this.OR, [154, 52, 18], 0.28);   // deeper orange for nuclei
+    this.buildPalette();
+  };
+  /* every (coherence, voltage) state a cell can show, resolved once into fill, stroke and nucleus styles.
+     Mixing happens on the colours as seen over the card, in OKLab, through a light neutral. */
+  Widget.prototype.buildPalette = function () {
+    var BG = this.BG, N1 = [244, 244, 245], N3 = [212, 212, 216], N4 = [161, 161, 170];   // true neutrals: a slate midpoint reads blue beside orange
+    var pal = [], ci, vi;
+    for (ci = 0; ci <= CQ; ci++) {
+      var c = ci / CQ;
+      for (vi = 0; vi <= VQ; vi++) {
+        var v = vi / VQ, warm = mixOK(this.AM, this.OR, sstep(0.15, 0.9, v));
+        // fill swings gently (the nucleus and trace carry the full beat)
+        var fa = lerp(0.1 + 0.06 * v, 0.17 + 0.21 * v, c), sa = lerp(0.55, 0.5 + 0.3 * v, c), na = lerp(0.55, 0.45 + 0.55 * v, c);
+        var fP = via(over(this.LOST, 0.1 + 0.06 * v, BG), N1, over(warm, 0.17 + 0.21 * v, BG), c);
+        var sP = via(over(this.LOST, 0.55, BG), N3, over(warm, 0.5 + 0.3 * v, BG), c);
+        var nP = via(over(this.LOSTN, 0.55, BG), N4, over(this.ORD, 0.45 + 0.55 * v, BG), c);
+        pal.push({ fill: under(fP, fa, BG), stroke: under(sP, sa, BG), nuc: under(nP, na, BG), nr: 0.9 + 0.3 * v * c });
+      }
+    }
+    this.pal = pal;
+    this.flashS = [];
+    for (var f = 0; f <= FQ; f++) this.flashS.push(rgba(this.SKY, 0.85 * f / FQ));
+    // trace colours by coherence: lost -> slate -> orange
+    this.traceC = [];
+    for (ci = 0; ci <= 32; ci++) this.traceC.push(via(this.LOSTN, N3, this.OR, ci / 32));
+    this.gcache = {};
   };
   /* coming back on screen after a while with card 03 already restored (or drifting apart):
      restart its loop so the viewer sees the signal re-entrain the tissue within a few seconds */
   Widget.prototype.replay = function () {
     if (this.reduce || !this.hiddenAt || performance.now() - this.hiddenAt < 1500) return;
     if (mod(this.T, RC) < 4.6) return;
-    this.T = Math.ceil(this.T / RC) * RC; this.reset(true); this.render();
+    // done on the next frame, not inside the IntersectionObserver callback
+    this.restart();
+  };
+  Widget.prototype.goTo = function (i) {
+    if (!this.swipe) return;
+    var rc = this.rects[i], left = clamp(rc.x + rc.w / 2 - this.W / 2, 0, this.root.scrollWidth - this.W);
+    try { this.root.scrollTo({ left: left, behavior: this.reduce ? 'auto' : 'smooth' }); } catch (e) { this.root.scrollLeft = left; }
+  };
+  Widget.prototype.onScroll = function () {
+    if (!this.swipe) return;
+    var x = this.root.scrollLeft, mid = x + this.W / 2, best = 0, bd = 1e9;
+    this.scrollX = x;
+    for (var i = 0; i < 3; i++) { var d = Math.abs(this.rects[i].x + this.rects[i].w / 2 - mid); if (d < bd) { bd = d; best = i; } }
+    if (x >= this.root.scrollWidth - this.W - 2) best = 2;
+    if (best !== this.active) {
+      this.active = best; this.setDots();
+      // arriving at stage 03 after it has already settled: replay the signal so the viewer sees it work
+      if (best === 2 && !this.reduce && mod(this.T, RC) >= 4.6) this.restart();
+    }
+    if (!this.running) this.render();
+  };
+  Widget.prototype.setDots = function () {
+    for (var i = 0; i < 3; i++) this.dots[i].classList.toggle('on', i === this.active);
+  };
+  Widget.prototype.restart = function () {
+    var self = this;
+    if (this.replayPending) return;
+    this.replayPending = true;
+    requestAnimationFrame(function () { self.replayPending = false; self.T = Math.ceil(self.T / RC) * RC; self.reset(true); self.render(); });
   };
   Widget.prototype.locked = function () { return document.documentElement.classList.contains('gate-locked'); };
   Widget.prototype.update = function () {
@@ -315,19 +416,26 @@
     else if (!want) this.running = false;
   };
   Widget.prototype.onResize = function (force) {
-    var w = this.mount.clientWidth, h = this.mount.clientHeight;
+    var w = this.root.clientWidth, h = this.root.clientHeight;
     if (!force && w === this.W && h === this.H) return;
     this.layout(); this.reset(true); this.render();
   };
   Widget.prototype.layout = function () {
-    var W = Math.max(1, this.mount.clientWidth), H = Math.max(1, this.mount.clientHeight);
+    var swipe = !!(swipeMQ && swipeMQ.matches);
+    this.swipe = swipe; this.mount.classList.toggle('cw-swipe', swipe);
+    var W = Math.max(1, this.root.clientWidth), H = Math.max(1, this.root.clientHeight);
     this.W = W; this.H = H;
     var dpr = Math.min(window.devicePixelRatio || 1, 2); this.dpr = dpr;
-    this.cv.width = Math.round(W * dpr); this.cv.height = Math.round(H * dpr);
-    var vertical = (mobileMQ && mobileMQ.matches) || W < 640;
+    var vertical = !swipe && ((mobileMQ && mobileMQ.matches) || W < 640);
     this.vertical = vertical;
-    var rects = [], i, gap, pad, traceH;
-    if (!vertical) {
+    var rects = [], i, gap, pad, traceH, CW = W;
+    if (swipe) {
+      // each stage is 82% of the width, so the next one peeks in from the edge
+      gap = 12; pad = 16; traceH = 40;
+      var sw = Math.round(W * 0.82);
+      for (i = 0; i < 3; i++) rects.push({ x: 1 + i * (sw + gap), y: 2, w: sw, h: H - 16 });
+      CW = 2 + 3 * sw + 2 * gap;
+    } else if (!vertical) {
       gap = clamp(W * 0.028, 20, 40); pad = W < 1000 ? 16 : 22; traceH = clamp(H * 0.13, 40, 56);
       var pw = (W - 2 * gap) / 3;
       for (i = 0; i < 3; i++) rects.push({ x: i * (pw + gap), y: 0, w: pw, h: H });
@@ -336,12 +444,14 @@
       var bh = (H - 2 * gap) / 3;
       for (i = 0; i < 3; i++) rects.push({ x: 0, y: i * (bh + gap), w: W, h: bh });
     }
-    this.gap = gap; this.rects = rects;
+    this.CW = CW; this.track.style.width = swipe ? CW + 'px' : '';
+    this.cv.width = Math.round(CW * dpr); this.cv.height = Math.round(H * dpr);
+    this.gap = gap; this.rects = rects; this.gcache = {};
     var headH = 44, tissueTop = pad + headH + 6;
     var tissueH = rects[0].h - tissueTop - 14 - traceH - pad;
     var s = clamp(tissueH / 5.9, 20, 34);
     // tight cards on phones use the short names
-    var tight = !vertical && rects[0].w < 300;
+    var tight = !vertical && !swipe && rects[0].w < 300;
     for (i = 0; i < 3; i++) {
       var rc = rects[i], cs = this.cards[i].style;
       cs.left = rc.x + 'px'; cs.top = rc.y + 'px'; cs.width = rc.w + 'px'; cs.height = rc.h + 'px';
@@ -353,6 +463,7 @@
       hs.left = (rc.x + pad) + 'px'; hs.top = (rc.y + pad) + 'px'; hs.width = (rc.w - 2 * pad) + 'px';
       this.heads[i].name.textContent = tight ? SHORT[i] : NAMES[i];
     }
+    if (swipe) { this.scrollX = this.root.scrollLeft; this.setDots(); } else this.scrollX = 0;
   };
   Widget.prototype.reset = function (keepTime) {
     if (!keepTime) this.T = 0;
@@ -380,14 +491,16 @@
   Widget.prototype.render = function () {
     var ctx = this.ctx, dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, this.W, this.H);
-    var cyc = mod(this.T, RC);
+    ctx.clearRect(0, 0, this.CW, this.H);
+    var cyc = mod(this.T, RC), lo = this.scrollX - this.W * 0.5, hi = this.scrollX + this.W * 1.5;
     for (var i = 0; i < 3; i++) {
-      var p = this.panels[i];
+      var p = this.panels[i], rc = this.rects[i];
+      // swipe layout: a stage well outside the scroller's view is not drawn
+      if (this.swipe && (rc.x > hi || rc.x + rc.w < lo)) continue;
       this.drawTissue(p, cyc);
       this.drawTrace(p);
     }
-    this.drawArrows();
+    if (!this.swipe) this.drawArrows();
     // card 03 rule: how much of the tissue is back in step
     var pr = this.panels[2], mc = 0;
     for (var k = 0; k < pr.cells.length; k++) mc += pr.cells[k].c;
@@ -396,7 +509,7 @@
   };
   Widget.prototype.drawTissue = function (p, cyc) {
     var ctx = this.ctx, T = this.T, cells = p.cells, s = p.s, i;
-    var OR = this.OR, AM = this.AM, LOST = this.LOST, SKY = this.SKY;
+    var AM = this.AM;
     p.geometry(T);
     // soft warm wash behind the tissue when it pulses together (normal compositing)
     var mv = 0;
@@ -406,30 +519,33 @@
       var t = p.tissue;
       ctx.save(); ctx.translate(p.cx, p.cy); ctx.scale(t.w * 0.6, t.h * 0.72);
       var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-      g.addColorStop(0, rgba(AM, 0.16 * mv)); g.addColorStop(0.6, rgba(AM, 0.06 * mv)); g.addColorStop(1, rgba(AM, 0));
+      g.addColorStop(0, rgba(AM, 0.12 * mv)); g.addColorStop(0.6, rgba(AM, 0.045 * mv)); g.addColorStop(1, rgba(AM, 0));
       ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2); ctx.restore();
     }
-    var rr = s * 0.24, nr = Math.max(1.6, s * 0.075);
-    ctx.lineJoin = 'round';
+    var rr = s * 0.24, nr = Math.max(1.6, s * 0.075), pal = this.pal;
+    /* batch: one path per palette entry, so a frame is a few dozen fills and strokes instead of hundreds */
+    var cellB = this.cellB || (this.cellB = []), nucB = this.nucB || (this.nucB = []), flB = this.flB || (this.flB = []), used = [], fused = [];
     for (i = 0; i < cells.length; i++) {
       var ce = cells[i]; if (ce.n < 3) continue;
-      var c = p.coh(ce), v = volt(ce.phi), l = 1 - c;
-      var warm = mixc(AM, OR, sstep(0.15, 0.9, v));
-      // two translucent layers instead of an RGB mix: slate fades out as warmth fades in (no muddy browns)
-      ctx.beginPath(); roundPoly(ctx, ce.poly, ce.n, rr);
-      if (l > 0.004) { ctx.fillStyle = rgba(LOST, (0.1 + 0.06 * v) * l); ctx.fill(); }
-      if (c > 0.004) { ctx.fillStyle = rgba(warm, (0.1 + 0.42 * v) * c); ctx.fill(); }
-      ctx.lineWidth = 1;
-      if (l > 0.004) { ctx.strokeStyle = rgba(LOST, 0.55 * l * (1 - 0.6 * c)); ctx.stroke(); }
-      if (c > 0.004) { ctx.strokeStyle = rgba(warm, (0.42 + 0.5 * v) * c); ctx.stroke(); }
-      var flash = p.mode === 'restore' ? Math.exp(-(T - ce.hit) * 2.4) : 0;
-      if (flash > 0.02) {
-        ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(SKY, 0.85 * flash); ctx.stroke();
+      var c = p.coh(ce), v = volt(ce.phi);
+      var key = Math.round(c * CQ) * (VQ + 1) + Math.round(v * VQ);
+      if (!cellB[key]) { cellB[key] = new Path2D(); nucB[key] = new Path2D(); used.push(key); }
+      roundPoly(cellB[key], ce.poly, ce.n, rr);
+      var r = nr * pal[key].nr;
+      nucB[key].moveTo(ce.x + r, ce.y); nucB[key].arc(ce.x, ce.y, r, 0, TAU);
+      if (p.mode === 'restore') {
+        var fq = Math.round(Math.exp(-(T - ce.hit) * 2.4) * FQ);
+        if (fq > 0) { if (!flB[fq]) { flB[fq] = new Path2D(); fused.push(fq); } roundPoly(flB[fq], ce.poly, ce.n, rr); }
       }
-      ctx.beginPath(); ctx.arc(ce.x, ce.y, nr * (0.9 + 0.3 * v * c), 0, TAU);
-      if (l > 0.004) { ctx.fillStyle = rgba(this.LOSTN, 0.55 * l); ctx.fill(); }
-      if (c > 0.004) { ctx.fillStyle = rgba(this.ORD, (0.45 + 0.55 * v) * c); ctx.fill(); }
     }
+    ctx.lineJoin = 'round'; ctx.lineWidth = 1;
+    for (i = 0; i < used.length; i++) { ctx.fillStyle = pal[used[i]].fill; ctx.fill(cellB[used[i]]); }
+    for (i = 0; i < used.length; i++) { ctx.strokeStyle = pal[used[i]].stroke; ctx.stroke(cellB[used[i]]); }
+    if (fused.length) {
+      ctx.lineWidth = 1.5;
+      for (i = 0; i < fused.length; i++) { ctx.strokeStyle = this.flashS[fused[i]]; ctx.stroke(flB[fused[i]]); flB[fused[i]] = null; }
+    }
+    for (i = 0; i < used.length; i++) { ctx.fillStyle = pal[used[i]].nuc; ctx.fill(nucB[used[i]]); cellB[used[i]] = nucB[used[i]] = null; }
     if (p.mode === 'restore') this.drawSignal(p, cyc);
   };
   Widget.prototype.drawSignal = function (p, cyc) {
@@ -458,26 +574,41 @@
     ctx.restore();
   };
   Widget.prototype.drawTrace = function (p) {
-    var ctx = this.ctx, tr = p.trace, T = this.T, OR = this.OR, AM = this.AM, LOST = this.LOSTN;
+    var ctx = this.ctx, tr = p.trace, T = this.T, TC = this.traceC, gcache = this.gcache;
     var pps = tr.w / TRACE_SEC, right = tr.x + tr.w, n = p.bt.length;
     if (!n) return;
     var top = tr.y + 4, hh = tr.h - 8;
     ctx.fillStyle = rgba(this.LINE, 1); ctx.fillRect(tr.x, tr.y + tr.h - 0.5, tr.w, 1);
     function X(t) { return right - 4 - (T - t) * pps; }
     function Y(v) { return top + hh - v * hh; }
-    function col(c) { return mixc(LOST, OR, c); }
-    function grad(cs, al, lo) {
-      var g = ctx.createLinearGradient(tr.x, 0, right, 0), step = Math.max(1, Math.floor(n / 12));
-      for (var i = 0; i < n; i += step) {
+    function col(c) { return TC[Math.round(clamp(c, 0, 1) * 32)]; }
+    var full = X(p.bt[0]) <= tr.x;
+    /* coloured by coherence along time; a window of constant coherence reuses a cached gradient */
+    function grad(cs, al, lo, kind) {
+      var mn = 1, mx = 0, i;
+      for (i = 0; i < n; i++) { if (cs[i] < mn) mn = cs[i]; if (cs[i] > mx) mx = cs[i]; }
+      var key = null, g;
+      if (full && mx - mn < 0.004) {
+        key = kind + Math.round(mx * 32) + ':' + tr.x + ':' + right;
+        if (gcache[key]) return gcache[key];
+        var cc = col(mx), aa = al * lerp(lo, 1, mx);
+        g = ctx.createLinearGradient(tr.x, 0, right, 0);
+        for (var q = 0; q <= 4; q++) g.addColorStop(q * 0.04, rgba(cc, aa * sstep(0, 0.16, q * 0.04)));
+        g.addColorStop(1, rgba(cc, aa));
+        gcache[key] = g; return g;
+      }
+      g = ctx.createLinearGradient(tr.x, 0, right, 0);
+      var step = Math.max(1, Math.floor(n / 12));
+      for (i = 0; i < n; i += step) {
         var x = (X(p.bt[i]) - tr.x) / tr.w; if (x < 0 || x > 1) continue;
         g.addColorStop(x, rgba(col(cs[i]), al * lerp(lo, 1, cs[i]) * sstep(0, 0.16, x)));
       }
       g.addColorStop(1, rgba(col(cs[n - 1]), al * lerp(lo, 1, cs[n - 1])));
-      if (X(p.bt[0]) > tr.x) g.addColorStop(0, rgba(OR, 0));
+      if (!full) g.addColorStop(0, rgba(col(cs[0]), 0));
       return g;
     }
-    function line(vals) {
-      ctx.beginPath();
+    function line(vals, keep) {
+      if (!keep) ctx.beginPath();
       var started = false;
       for (var i = 0; i < n; i++) {
         var x = X(p.bt[i]); if (x < tr.x - 6) continue;
@@ -487,13 +618,17 @@
     }
     ctx.save(); ctx.beginPath(); ctx.rect(tr.x, tr.y - 2, tr.w, tr.h + 2); ctx.clip();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 1;
-    for (var k = 0; k < p.bs.length; k++) { line(p.bs[k]); ctx.strokeStyle = grad(p.bsc[k], 0.3, 0.9); ctx.stroke(); }
+    // the faint per-cell lines share one path and take the tissue's mean coherence
+    ctx.beginPath();
+    for (var k = 0; k < p.bs.length; k++) line(p.bs[k], true);
+    ctx.strokeStyle = grad(p.bc, 0.3, 0.9, 'l'); ctx.stroke();
     // soft area under the mean rhythm
-    if (line(p.bm)) {
+    ctx.beginPath();
+    if (line(p.bm, true)) {
       ctx.lineTo(X(p.bt[n - 1]), tr.y + tr.h); ctx.lineTo(tr.x - 6, tr.y + tr.h); ctx.closePath();
-      ctx.fillStyle = grad(p.bc, 0.1, 0.5); ctx.fill();
+      ctx.fillStyle = grad(p.bc, 0.1, 0.5, 'a'); ctx.fill();
     }
-    line(p.bm); ctx.lineWidth = 1.5; ctx.strokeStyle = grad(p.bc, 1, 0.85); ctx.stroke();
+    ctx.beginPath(); line(p.bm, true); ctx.lineWidth = 1.5; ctx.strokeStyle = grad(p.bc, 1, 0.85, 'm'); ctx.stroke();
     ctx.restore();
     var lx = X(p.bt[n - 1]), ly = Y(p.bm[n - 1]), lc = col(p.bc[n - 1]);
     ctx.beginPath(); ctx.arc(lx, ly, 4.5, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill();

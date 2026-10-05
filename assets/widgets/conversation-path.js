@@ -43,9 +43,9 @@
     COL.bg = parseColor(cs.getPropertyValue('--bg'), [255, 255, 255]);
     COL.orangeSoft = parseColor(cs.getPropertyValue('--orange-soft'), [255, 247, 237]);
     COL.skySoft = parseColor(cs.getPropertyValue('--sky-soft'), [240, 249, 255]);
-    // deeper text tones for active labels (AA on white)
-    COL.orangeInk = mix(COL.orange, COL.head, 0.28);
-    COL.skyInk = mix(COL.skyDeep, COL.head, 0.12);
+    // shared ink tokens for small text on white (AA)
+    COL.orangeInk = parseColor(cs.getPropertyValue('--orange-ink'), [194, 65, 12]);
+    COL.skyInk = parseColor(cs.getPropertyValue('--sky-ink'), [3, 105, 161]);
     COL.white = [255, 255, 255];
   }
   function softShadow(ctx, blur, dy, a) {
@@ -87,10 +87,57 @@
     ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
     ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
   }
+  /* soft glow: one cached radial sprite per colour, blitted with globalAlpha (no per-frame gradient) */
+  var glowCache = {}, glowCount = 0;
+  function glowSprite(col) {
+    // colours are quantised so tints that drift with distance reuse a small, bounded set of sprites
+    col = col.map(function (v) { return Math.min(255, Math.round(v / 6) * 6); });
+    var key = col.join(',');
+    if (glowCache[key]) return glowCache[key];
+    if (++glowCount > 64) { glowCache = {}; glowCount = 1; }
+    var c = doc.createElement('canvas'), S = 128; c.width = c.height = S;
+    var x = c.getContext('2d'), g = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    g.addColorStop(0, rgba(col, 1)); g.addColorStop(0.3, rgba(col, 0.62)); g.addColorStop(0.62, rgba(col, 0.2)); g.addColorStop(1, rgba(col, 0));
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+    return (glowCache[key] = c);
+  }
   function glowDot(ctx, x, y, r, col, a) {
-    var g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, rgba(col, a)); g.addColorStop(0.3, rgba(col, a * 0.62)); g.addColorStop(0.62, rgba(col, a * 0.2)); g.addColorStop(1, rgba(col, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    if (a <= 0.003) return;
+    var ga = ctx.globalAlpha;
+    ctx.globalAlpha = ga * clamp(a, 0, 1);
+    ctx.drawImage(glowSprite(col), x - r, y - r, 2 * r, 2 * r);
+    ctx.globalAlpha = ga;
+  }
+  /* offscreen layers at the host's backing size; drawn 1:1 in device pixels */
+  function makeLayer(h, w, hh, ox, oy) {
+    var c = doc.createElement('canvas');
+    var dpr = h.dpr;
+    w = w == null ? h.w : w; hh = hh == null ? h.h : hh; ox = ox || 0; oy = oy || 0;
+    c.width = Math.max(1, Math.ceil(w * dpr)); c.height = Math.max(1, Math.ceil(hh * dpr));
+    var x = c.getContext('2d');
+    x.setTransform(dpr, 0, 0, dpr, -ox * dpr, -oy * dpr);
+    return { c: c, ctx: x, ox: ox, oy: oy, w: c.width / dpr, h: c.height / dpr };
+  }
+  function blitLayer(h, ctx, L, alpha) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (alpha != null) ctx.globalAlpha = alpha;
+    ctx.drawImage(L.c, Math.round(L.ox * h.dpr), Math.round(L.oy * h.dpr));
+    ctx.restore();
+  }
+  /* draw a sprite baked around its own origin at (x, y), snapped to device pixels */
+  function blitAt(h, ctx, L, x, y, alpha) {
+    var d = h.dpr;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (alpha != null) ctx.globalAlpha = alpha;
+    ctx.drawImage(L.c, Math.round((x + L.ox) * d), Math.round((y + L.oy) * d));
+    ctx.restore();
+  }
+  /* a sprite whose top-left sits on a whole device pixel, so baked text stays crisp */
+  function makeSprite(h, x0, y0, x1, y1) {
+    var d = h.dpr, ox = Math.floor(x0 * d) / d, oy = Math.floor(y0 * d) / d;
+    return makeLayer(h, x1 - ox, y1 - oy, ox, oy);
   }
 
   /* ---------- widget host: canvas, sizing, visibility, shared loop ---------- */
@@ -106,6 +153,7 @@
     if (impl.decorate) impl.decorate(this);
     impl.init(this);
   }
+  Host.prototype.bake = function () { if (this.w && this.impl.bake) this.impl.bake(this); };
   Host.prototype.resize = function (force) {
     var r = this.stage.getBoundingClientRect();
     var w = Math.round(r.width), h = Math.round(r.height);
@@ -115,6 +163,7 @@
     this.w = w; this.h = h; this.dpr = dpr;
     this.cv.width = Math.round(w * dpr); this.cv.height = Math.round(h * dpr);
     this.impl.layout(this);
+    this.bake();
     if (reduced()) this.impl.still(this);
     return true;
   };
@@ -226,12 +275,13 @@
       st.mode = W < 440 ? 'v' : 'h';
       var A, B, a0, a1, b0, b1, R, ctr, aoff, ctrlA, ctrlB, P = function (p, r, ang) { return { x: p.x + r * Math.cos(ang), y: p.y + r * Math.sin(ang) }; };
       if (st.mode === 'h') {
-        R = clamp(W * 0.055, 34, 48);
+        R = clamp(W * 0.07, 36, 60);
         var cy = Math.round(H * 0.5);
-        var span = Math.min(W - 2 * (R + 30), 780);
+        // a centred, tighter figure on wide screens: the two poles about 560px apart
+        var span = Math.min(W - 2 * (R * 1.85 + 4), 570); // keeps each pole's glow and ripple inside the stage
         A = { x: cx - span / 2, y: cy }; B = { x: cx + span / 2, y: cy };
         ctr = { x: cx, y: cy };
-        aoff = Math.min(clamp(span * 0.12, 64, 94), H / 2 - 40);
+        aoff = Math.min(clamp(span * 0.16, 64, 96), H / 2 - 20);
         var ea = 0.62; // edge angle from axis
         // lane 0: outbound, intelligence -> body, along the top
         b0 = P(B, R + 8, Math.PI + ea); a0 = P(A, R + 8, -ea);
@@ -264,12 +314,80 @@
       st.seedBlob = st.seedBlob || [Math.random() * 6, Math.random() * 6, Math.random() * 6];
       if (!st.warmed) { st.warmed = true; this.warm(h); }
     },
+    bake: function (h) {
+      var st = h.st, A = st.A, B = st.B, R = st.R, sky = COL.sky, orange = COL.orange, amber = COL.amber, i, k, ctx;
+      var l0 = st.lanes[0], l1 = st.lanes[1];
+      // field, at the strongest attunement; drawn with a lower alpha per frame
+      var F = makeLayer(h); ctx = F.ctx;
+      var fieldA = 0.085, fe = st.mode === 'h' ? 0.07 : 0.1;
+      var g = ctx.createLinearGradient(A.x, A.y, B.x, B.y);
+      g.addColorStop(0, rgba(amber, 0)); g.addColorStop(fe, rgba(amber, 0)); g.addColorStop(fe + 0.14, rgba(amber, fieldA)); g.addColorStop(0.5, rgba(COL.line, 0.3));
+      g.addColorStop(0.86 - fe, rgba(sky, fieldA)); g.addColorStop(1 - fe, rgba(sky, 0)); g.addColorStop(1, rgba(sky, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(l0.X[0], l0.Y[0]);
+      for (i = 4; i <= l0.n; i += 4) ctx.lineTo(l0.X[i], l0.Y[i]);
+      for (i = 0; i <= l1.n; i += 4) ctx.lineTo(l1.X[i], l1.Y[i]);
+      ctx.closePath(); ctx.fill();
+      st.fieldLayer = F;
+      // tracks: a solid tinted hairline per lane, faded at both ends, with a clear arrowhead
+      var T = makeLayer(h); ctx = T.ctx;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (k = 0; k < 2; k++) {
+        var ln = st.lanes[k], col = k === 0 ? sky : orange;
+        var tg = ctx.createLinearGradient(ln.X[0], ln.Y[0], ln.X[ln.n], ln.Y[ln.n]);
+        var f0 = Math.min(0.2, 30 / ln.len);
+        tg.addColorStop(0, rgba(col, 0)); tg.addColorStop(f0, rgba(col, 0.3)); tg.addColorStop(1 - f0 * 0.5, rgba(col, 0.32)); tg.addColorStop(1, rgba(col, 0.32));
+        ctx.lineWidth = 1.25; ctx.strokeStyle = tg;
+        ctx.beginPath(); ctx.moveTo(ln.X[0], ln.Y[0]);
+        for (i = 3; i <= ln.n; i += 3) ctx.lineTo(ln.X[i], ln.Y[i]);
+        ctx.lineTo(ln.X[ln.n], ln.Y[ln.n]); ctx.stroke();
+        chevron(ctx, ln, ln.len - 1, 8);
+        ctx.lineWidth = 1.75; ctx.strokeStyle = rgba(col, 0.95); ctx.stroke();
+      }
+      st.trackLayer = T;
+      // node shadows: baked once, blitted under the live shapes (no per-frame blur)
+      function shadowSprite(shape, dy) {
+        var pad = 30, sp = makeSprite(h, -R - pad, -R - pad, R + pad, R + pad), c2 = sp.ctx;
+        shape(c2); softShadow(c2, 14, dy, 0.1); c2.fillStyle = '#fff'; c2.fill(); noShadow(c2);
+        return sp;
+      }
+      st.bodyShadow = shadowSprite(function (c2) { c2.beginPath(); c2.arc(0, 0, R * 0.93, 0, TAU); }, 4);
+      st.intelShadow = shadowSprite(function (c2) {
+        c2.beginPath();
+        for (var q = 0; q <= 6; q++) { var a = -Math.PI / 2 + q * TAU / 6, rr = R * 0.97; if (q) c2.lineTo(rr * Math.cos(a), rr * Math.sin(a)); else c2.moveTo(rr * Math.cos(a), rr * Math.sin(a)); }
+        c2.closePath();
+      }, 0); // the offset is applied when drawn, so it stays below the hexagon as it turns
+      // static gradients
+      st.grad = {};
+      st.grad.bodyCore = (function () { var c2 = h.ctx, gg = c2.createLinearGradient(A.x - R * 0.4, A.y - R * 0.4, A.x + R * 0.4, A.y + R * 0.4); gg.addColorStop(0, rgba(amber, 0.95)); gg.addColorStop(1, rgba(orange, 0.95)); return gg; })();
+      st.grad.intelCore = (function () { var c2 = h.ctx, gg = c2.createLinearGradient(B.x - R * 0.2, B.y - R * 0.2, B.x + R * 0.2, B.y + R * 0.2); gg.addColorStop(0, rgba(sky, 1)); gg.addColorStop(1, rgba(COL.skyDeep, 1)); return gg; })();
+      // tag pills: one sprite per word (shadow, border, dot, ink text)
+      st.tags = {};
+      var words = SIGNALS.map(function (w, j) { return [w.toUpperCase(), 0, j]; }).concat([['RESPONSE', 1, 0]]);
+      words.forEach(function (wd) {
+        var text = wd[0], lane = wd[1];
+        var col = lane === 0 ? COL.sky : COL.orange, ink = lane === 0 ? COL.skyInk : COL.orangeInk;
+        var m = h.ctx; m.font = '500 11px ' + MONO;
+        var ls = 1.4, tw = spacedWidth(m, text, ls), pw = Math.round(tw + 26), ph = 24, pad = 14;
+        var sp = makeSprite(h, -pw / 2 - pad, -ph / 2 - pad, pw / 2 + pad, ph / 2 + pad), c2 = sp.ctx;
+        c2.font = '500 11px ' + MONO;
+        roundRect(c2, -pw / 2, -ph / 2, pw, ph, ph / 2);
+        softShadow(c2, 10, 3, 0.1); c2.fillStyle = '#fff'; c2.fill(); noShadow(c2);
+        c2.lineWidth = 1; c2.strokeStyle = rgba(mix(COL.line, col, 0.22), 1); c2.stroke();
+        c2.fillStyle = rgba(col, 1); c2.beginPath(); c2.arc(-pw / 2 + 11, 0, 2.5, 0, TAU); c2.fill();
+        c2.fillStyle = rgba(ink, 1); c2.textBaseline = 'middle';
+        fillSpaced(c2, text, -pw / 2 + 18, 0.5, ls, 'left');
+        st.tags[lane + ':' + text] = { sp: sp, pw: pw, ph: ph };
+      });
+    },
     still: function (h) {
       var st = h.st;
       st.t = 3.4; st.att = 0.6; st.fx = []; st.timers = []; st.scan = 2;
+      // stacked layout centres both tags on one axis, so stagger the two packets there to keep the tags apart
+      var f = st.tagInside ? 0.63 : 0.5;
       st.packets = [
-        { lane: 0, k: 0, hp: st.lanes[0].len * 0.5 + st.Lp * 0.5, arrived: false, born: 0 },
-        { lane: 1, k: 4, hp: st.lanes[1].len * 0.5 + st.Lp * 0.5, arrived: false, born: 0 }
+        { lane: 0, k: 0, hp: st.lanes[0].len * f + st.Lp * 0.5, arrived: false, born: 0 },
+        { lane: 1, k: 4, hp: st.lanes[1].len * f + st.Lp * 0.5, arrived: false, born: 0 }
       ];
     },
     update: function (h, dt) {
@@ -308,42 +426,25 @@
       var beat = TAU * t / 5.2;
       var bodyBreath = Math.sin(beat - (1 - att) * 1.9);
       var intelBreath = Math.sin(beat);
+      if (!st.fieldLayer) this.bake(h);
 
-      // soft field between the lanes, warm near the body and cool near the intelligence
-      var fieldA = 0.045 + 0.04 * att;
-      var g = ctx.createLinearGradient(A.x, A.y, B.x, B.y);
-      var fe = st.mode === 'h' ? 0.07 : 0.1;
-      g.addColorStop(0, rgba(amber, 0)); g.addColorStop(fe, rgba(amber, 0)); g.addColorStop(fe + 0.14, rgba(amber, fieldA)); g.addColorStop(0.5, rgba(COL.line, 0.2));
-      g.addColorStop(0.86 - fe, rgba(sky, fieldA)); g.addColorStop(1 - fe, rgba(sky, 0)); g.addColorStop(1, rgba(sky, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      var l0 = st.lanes[0], l1 = st.lanes[1], i;
-      ctx.moveTo(l0.X[0], l0.Y[0]);
-      for (i = 4; i <= l0.n; i += 4) ctx.lineTo(l0.X[i], l0.Y[i]);
-      for (i = 0; i <= l1.n; i += 4) ctx.lineTo(l1.X[i], l1.Y[i]);
-      ctx.closePath(); ctx.fill();
-
-      // lane tracks + slow carrier: constant contact in both directions
+      // soft field between the lanes (baked at full strength, faded in as the two attune)
+      blitLayer(h, ctx, st.fieldLayer, (0.045 + 0.04 * att) / 0.085);
+      // lane tracks and arrowheads (baked), then the slow carrier dots
+      blitLayer(h, ctx, st.trackLayer);
+      var i;
       for (var k = 0; k < 2; k++) {
         var ln = st.lanes[k], col = k === 0 ? sky : orange;
-        ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 0.9);
-        ctx.beginPath(); ctx.moveTo(ln.X[0], ln.Y[0]);
-        for (i = 3; i <= ln.n; i += 3) ctx.lineTo(ln.X[i], ln.Y[i]);
-        ctx.lineTo(ln.X[ln.n], ln.Y[ln.n]); ctx.stroke();
         var gap = 16, off = (t * 16) % gap;
-        ctx.fillStyle = rgba(col, 0.7);
+        ctx.fillStyle = rgba(col, 0.75);
+        ctx.beginPath();
         for (var s = off; s < ln.len - 18; s += gap) {
           var e = smooth(0, 40, s) * smooth(ln.len - 18, ln.len - 50, s);
           if (e < 0.05) continue;
-          var ii = Math.round(s);
-          ctx.globalAlpha = e;
-          ctx.beginPath(); ctx.arc(ln.X[ii], ln.Y[ii], 1.15, 0, TAU); ctx.fill();
+          var ii = Math.round(s), rr = 1.5 * Math.sqrt(e);
+          ctx.moveTo(ln.X[ii] + rr, ln.Y[ii]); ctx.arc(ln.X[ii], ln.Y[ii], rr, 0, TAU);
         }
-        ctx.globalAlpha = 1;
-        // direction: a small chevron where each lane meets its destination
-        chevron(ctx, ln, ln.len - 1, 4.5);
-        ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.strokeStyle = rgba(col, 0.85); ctx.stroke();
+        ctx.fill();
       }
 
       // packets
@@ -357,6 +458,7 @@
         ctx.beginPath(); ctx.arc(P.x, P.y, R * (1.08 + 0.7 * eu), 0, TAU); ctx.stroke();
       }
 
+      this.h = h;
       this.drawBody(ctx, A.x, A.y, R, t, att, bodyBreath, st);
       this.drawIntel(ctx, B.x, B.y, R, t, att, intelBreath, st);
 
@@ -424,27 +526,22 @@
       if (a < 0.01) return;
       var o = laneAt(ln, c, {});
       var text = (p.lane === 0 ? SIGNALS[p.k] : 'Response').toUpperCase();
-      var col = p.lane === 0 ? COL.sky : COL.orange;
-      var ink = p.lane === 0 ? COL.skyInk : COL.orangeInk;
-      var amp = p.lane === 0 ? SIG_AMP[p.k] : 9;
-      ctx.font = '500 11px ' + MONO;
-      var ls = 1.4, tw = spacedWidth(ctx, text, ls), pw = tw + 26, ph = 24;
+      var tag = st.tags[p.lane + ':' + text];
+      if (!tag) return;
+      var amp = p.lane === 0 ? SIG_AMP[p.k] : 9, pw = tag.pw, ph = tag.ph;
       var x, y;
       if (st.tagInside) { x = st.ctr.x; y = o.y; }
-      else { var dd = amp + 9 + ph / 2; x = o.x + o.nx * dd; y = o.y + o.ny * dd; }
+      else { var dd = amp + 9 + ph / 2; x = o.x - o.nx * dd; y = o.y - o.ny * dd; } // inside the lens, between the two lanes
       x = clamp(x, pw / 2 + 4, h.w - pw / 2 - 4);
-      ctx.globalAlpha = a;
-      roundRect(ctx, x - pw / 2, y - ph / 2, pw, ph, ph / 2);
-      softShadow(ctx, 10, 3, 0.1);
-      ctx.fillStyle = '#fff'; ctx.fill();
-      noShadow(ctx);
-      ctx.lineWidth = 1; ctx.strokeStyle = rgba(mix(COL.line, col, 0.22), 1); ctx.stroke();
-      ctx.fillStyle = rgba(col, 1);
-      ctx.beginPath(); ctx.arc(x - pw / 2 + 11, y, 2.5, 0, TAU); ctx.fill();
-      ctx.fillStyle = rgba(ink, 1);
-      ctx.textBaseline = 'middle';
-      fillSpaced(ctx, text, x - pw / 2 + 18, y + 0.5, ls, 'left');
-      ctx.globalAlpha = 1;
+      blitAt(h, ctx, tag.sp, x, y, a);
+    },
+    // radial washes, cached per small step of attunement
+    wash: function (st, key, x, y, R, c0, c1, a1) {
+      var q = Math.round(a1 * 100), id = key + q, c = st.grad[id];
+      if (c) return c;
+      var g = this.h.ctx.createRadialGradient(x - R * 0.3, y - R * 0.35, R * 0.1, x, y, R * 1.1);
+      g.addColorStop(0, rgba(c0, 1)); g.addColorStop(1, rgba(c1, q / 100));
+      return (st.grad[id] = g);
     },
     drawBody: function (ctx, x, y, R, t, att, breath, st) {
       var orange = COL.orange, amber = COL.amber, sd = st.seedBlob, hit = st.bodyHit;
@@ -470,19 +567,14 @@
         ctx.closePath();
       }
       // outer membrane: white body with a soft shadow, then a warm wash
+      blitAt(this.h, ctx, st.bodyShadow, x, y);
       trace(paths[0]);
-      softShadow(ctx, 14, 4, 0.1);
       ctx.fillStyle = '#fff'; ctx.fill();
-      noShadow(ctx);
-      var wash = ctx.createRadialGradient(x - R * 0.3, y - R * 0.35, R * 0.1, x, y, R * 1.1);
-      wash.addColorStop(0, rgba(COL.orangeSoft, 1)); wash.addColorStop(1, rgba(amber, 0.16 + 0.06 * att));
-      ctx.fillStyle = wash; ctx.fill();
+      ctx.fillStyle = this.wash(st, 'b', x, y, R, COL.orangeSoft, amber, 0.16 + 0.06 * att); ctx.fill();
       for (k = 0; k < rings; k++) {
         trace(paths[k]);
         if (k === rings - 1) {
-          var core = ctx.createLinearGradient(x - R * 0.4, y - R * 0.4, x + R * 0.4, y + R * 0.4);
-          core.addColorStop(0, rgba(amber, 0.95)); core.addColorStop(1, rgba(orange, 0.95));
-          ctx.fillStyle = core; ctx.fill();
+          ctx.fillStyle = st.grad.bodyCore; ctx.fill();
         }
         ctx.lineWidth = k === 0 ? 1.6 : 1;
         ctx.strokeStyle = rgba(k === 0 ? orange : mix(orange, amber, 0.4), [1, 0.55, 0.42, 0.9][k] + 0.05 * hit);
@@ -509,13 +601,13 @@
         ctx.closePath();
       }
       // face: white with soft shadow, then a cool wash
+      var sh = st.intelShadow;
+      ctx.save(); ctx.translate(x, y + 4 / this.h.dpr); ctx.rotate(rot + Math.PI / 2);
+      ctx.drawImage(sh.c, sh.ox, sh.oy, sh.w, sh.h);
+      ctx.restore();
       hex(V);
-      softShadow(ctx, 14, 4, 0.1);
       ctx.fillStyle = '#fff'; ctx.fill();
-      noShadow(ctx);
-      var wash = ctx.createRadialGradient(x - R * 0.3, y - R * 0.35, R * 0.1, x, y, R * 1.1);
-      wash.addColorStop(0, rgba(COL.skySoft, 1)); wash.addColorStop(1, rgba(sky, 0.14 + 0.06 * att));
-      ctx.fillStyle = wash; ctx.fill();
+      ctx.fillStyle = this.wash(st, 'i', x, y, R, COL.skySoft, sky, 0.14 + 0.06 * att); ctx.fill();
       // learned structure: chords appear as the two become attuned
       var nCh = Math.round(clamp((att - 0.1) / 0.8, 0, 1) * 6);
       ctx.lineWidth = 1;
@@ -541,8 +633,7 @@
         ctx.lineWidth = 1.25; ctx.strokeStyle = rgba(deep, 1); ctx.stroke();
       }
       // core
-      var core = ctx.createLinearGradient(x - R * 0.2, y - R * 0.2, x + R * 0.2, y + R * 0.2);
-      core.addColorStop(0, rgba(sky, 1)); core.addColorStop(1, rgba(deep, 1));
+      var core = st.grad.intelCore;
       var cr = R * 0.17 * (1 + 0.15 * hit);
       ctx.fillStyle = core;
       ctx.beginPath();
@@ -673,20 +764,94 @@
         if (st.t > r.t0 + r.dur) { st.returns.splice(i, 1); st.home = Math.max(st.home, 0.75); }
       }
     },
-    draw: function (h, ctx) {
-      var st = h.st, cx = st.cx, cy = st.cy, sky = COL.sky, orange = COL.orange, i, n;
-      var boxes = st.boxes, all = boxes.concat([st.homeBox]);
-      var tc = st.stillFront ? 2.15 : st.t - Math.floor(st.t / PERIOD) * PERIOD;
-      var rho = this.front(st, tc);
-      var self = this;
-
-      // ground: two soft concentric zones, the home's rooms warm, the wider settings cool
+    nodeCol: function (n) { return n.ring === 1 ? mix(COL.orange, COL.amber, 0.25) : COL.sky; },
+    // static parts are baked once per layout: base (ground, rings, ticks, spokes) and top (discs, home, labels)
+    bake: function (h) {
+      var st = h.st, cx = st.cx, cy = st.cy, sky = COL.sky, orange = COL.orange, i, n, ctx;
+      var boxes = st.boxes, self = this;
+      var base = makeLayer(h); ctx = base.ctx;
       var g0 = ctx.createRadialGradient(cx, cy, st.rh, cx, cy, st.r2 + 14);
       g0.addColorStop(0, rgba(sky, 0.02)); g0.addColorStop(0.75, rgba(sky, 0.055)); g0.addColorStop(1, rgba(sky, 0.0));
       ctx.fillStyle = g0; ctx.beginPath(); ctx.arc(cx, cy, st.r2 + 14, 0, TAU); ctx.fill();
       var g1 = ctx.createRadialGradient(cx, cy, st.rh * 0.8, cx, cy, st.r1 + 8);
       g1.addColorStop(0, rgba(COL.amber, 0.1)); g1.addColorStop(0.85, rgba(COL.amber, 0.05)); g1.addColorStop(1, rgba(COL.amber, 0));
       ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(cx, cy, st.r1 + 8, 0, TAU); ctx.fill();
+      var rings = [st.r1, st.r2];
+      for (i = 0; i < 2; i++) {
+        maskedCircle(ctx, cx, cy, rings[i], boxes);
+        ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
+      }
+      ctx.strokeStyle = rgba(COL.line2, 0.8); ctx.lineWidth = 1; ctx.beginPath();
+      for (i = 0; i < 120; i++) {
+        var ta = i / 120 * TAU, r0 = st.r2 + 7, r1t = st.r2 + (i % 5 === 0 ? 12 : 10);
+        var tx0 = cx + r0 * Math.cos(ta), ty0 = cy + r0 * Math.sin(ta), tx1 = cx + r1t * Math.cos(ta), ty1 = cy + r1t * Math.sin(ta);
+        if (inBoxes(boxes, tx0, ty0) || inBoxes(boxes, tx1, ty1)) continue;
+        ctx.moveTo(tx0, ty0); ctx.lineTo(tx1, ty1);
+      }
+      ctx.stroke();
+      ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.muted, 0.5);
+      for (i = 0; i < st.nodes.length; i++) {
+        n = st.nodes[i];
+        ctx.beginPath();
+        maskedSegment(ctx, cx + Math.cos(n.a) * (st.rh + 6), cy + Math.sin(n.a) * (st.rh + 6),
+          n.x - Math.cos(n.a) * (n.nr + 5), n.y - Math.sin(n.a) * (n.nr + 5), boxes);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      st.base = base;
+
+      var top = makeLayer(h); ctx = top.ctx;
+      for (i = 0; i < st.nodes.length; i++) {
+        n = st.nodes[i];
+        var nc = self.nodeCol(n);
+        if (n.ring === 1) {
+          ctx.beginPath(); ctx.arc(n.x, n.y, n.nr + 5, 0, TAU);
+          ctx.lineWidth = 1; ctx.strokeStyle = rgba(nc, 0.3); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.nr, 0, TAU);
+        softShadow(ctx, 6, 1.5, 0.12);
+        ctx.fillStyle = rgba(mix(COL.white, nc, 0.12), 1); ctx.fill();
+        noShadow(ctx);
+        ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx, cy, st.rh, 0, TAU);
+      softShadow(ctx, 18, 6, 0.12);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      noShadow(ctx);
+      var hg = ctx.createRadialGradient(cx, cy - st.rh * 0.4, st.rh * 0.1, cx, cy, st.rh);
+      hg.addColorStop(0, rgba(COL.orangeSoft, 1)); hg.addColorStop(1, rgba(COL.amber, 0.24));
+      ctx.fillStyle = hg; ctx.fill();
+      var hs = ctx.createLinearGradient(cx - st.rh, cy - st.rh, cx + st.rh, cy + st.rh);
+      hs.addColorStop(0, rgba(COL.amber, 1)); hs.addColorStop(1, rgba(orange, 1));
+      ctx.lineWidth = 2; ctx.strokeStyle = hs; ctx.stroke();
+      var rw = st.rh * 0.26, ry = cy - st.homeFs * 0.95;
+      ctx.beginPath(); ctx.moveTo(cx - rw, ry + rw * 0.55); ctx.lineTo(cx, ry - rw * 0.15); ctx.lineTo(cx + rw, ry + rw * 0.55);
+      ctx.lineWidth = 1.75; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = rgba(orange, 1); ctx.stroke();
+      ctx.font = '600 ' + st.homeFs + 'px ' + DISP; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = rgba(COL.head, 1);
+      ctx.fillText('The Home', cx, cy + st.homeFs * 0.42);
+      st.top = top;
+
+      // each label baked twice, slate and ink; lit labels cross-fade by alpha, never by channel mixing
+      st.labelSprites = st.nodes.map(function (nd, k) {
+        var b = boxes[k], out = [];
+        [COL.muted, nd.ring === 1 ? COL.orangeInk : COL.skyInk].forEach(function (col) {
+          var sp = makeSprite(h, b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2), c2 = sp.ctx;
+          c2.font = '500 ' + st.fs + 'px ' + MONO; c2.textBaseline = 'alphabetic';
+          c2.fillStyle = rgba(col, 1);
+          for (var li = 0; li < nd.lines.length; li++) fillSpaced(c2, nd.lines[li], nd.lx, nd.ly + li * st.lh, st.ls, 'center');
+          out.push(sp);
+        });
+        return out;
+      });
+    },
+    draw: function (h, ctx) {
+      var st = h.st, cx = st.cx, cy = st.cy, orange = COL.orange, i, n;
+      if (!st.base) this.bake(h);
+      var tc = st.stillFront ? 2.15 : st.t - Math.floor(st.t / PERIOD) * PERIOD;
+      var rho = this.front(st, tc);
+
+      blitLayer(h, ctx, st.base);
 
       // trailing band of the propagating pulse
       var fa = smooth(st.rh, st.rh + 20, rho) * (1 - smooth(st.r2 + 6, st.rEdge, rho));
@@ -698,49 +863,35 @@
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rho, 0, TAU); ctx.arc(cx, cy, inner, 0, TAU, true); ctx.fill();
       }
 
-      // rings
+      // lit rings
       var rings = [st.r1, st.r2];
       for (i = 0; i < 2; i++) {
-        maskedCircle(ctx, cx, cy, rings[i], boxes);
-        ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
         var rl = st.ringLit[i + 1];
-        if (rl > 0.01) { ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(this.tint(st, rings[i]), 0.7 * rl); ctx.stroke(); }
-      }
-      // tick ring just outside the outer ring
-      ctx.strokeStyle = rgba(COL.line2, 0.8); ctx.lineWidth = 1; ctx.beginPath();
-      for (i = 0; i < 120; i++) {
-        var ta = i / 120 * TAU, r0 = st.r2 + 7, r1t = st.r2 + (i % 5 === 0 ? 12 : 10);
-        var tx0 = cx + r0 * Math.cos(ta), ty0 = cy + r0 * Math.sin(ta), tx1 = cx + r1t * Math.cos(ta), ty1 = cy + r1t * Math.sin(ta);
-        if (inBoxes(boxes, tx0, ty0) || inBoxes(boxes, tx1, ty1)) continue;
-        ctx.moveTo(tx0, ty0); ctx.lineTo(tx1, ty1);
-      }
-      ctx.stroke();
-
-      // spokes: the same loop runs from the home to every setting
-      for (i = 0; i < st.nodes.length; i++) {
-        n = st.nodes[i];
-        var sx0 = cx + Math.cos(n.a) * (st.rh + 6), sy0 = cy + Math.sin(n.a) * (st.rh + 6);
-        var sx1 = n.x - Math.cos(n.a) * (n.nr + 5), sy1 = n.y - Math.sin(n.a) * (n.nr + 5);
-        ctx.beginPath(); maskedSegment(ctx, sx0, sy0, sx1, sy1, boxes);
-        ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.muted, 0.5); ctx.stroke(); ctx.setLineDash([]);
-        // pulse segment travelling out along the spoke
-        var d0 = st.rh + 6, d1 = n.r - n.nr - 5;
-        if (rho > d0 && rho < d1 + 30 && fa > 0.01) {
-          var hd = Math.min(rho, d1), tl = Math.max(d0, rho - 46);
-          if (hd > tl) {
-            var gx0 = cx + Math.cos(n.a) * tl, gy0 = cy + Math.sin(n.a) * tl, gx1 = cx + Math.cos(n.a) * hd, gy1 = cy + Math.sin(n.a) * hd;
-            var sg = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
-            var fadeEnd = 1 - smooth(d1, d1 + 30, rho);
-            sg.addColorStop(0, rgba(fc, 0)); sg.addColorStop(1, rgba(fc, 0.95 * fadeEnd));
-            ctx.strokeStyle = sg; ctx.lineWidth = 2; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx1, gy1); ctx.stroke();
-          }
+        if (rl > 0.01) {
+          maskedCircle(ctx, cx, cy, rings[i], st.boxes);
+          ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(this.tint(st, rings[i]), 0.7 * rl); ctx.stroke();
         }
       }
 
-      // the wavefront itself
+      // pulse segments travelling out along the spokes
       if (fa > 0.01) {
-        maskedCircle(ctx, cx, cy, rho, all);
+        ctx.lineWidth = 2; ctx.lineCap = 'round';
+        for (i = 0; i < st.nodes.length; i++) {
+          n = st.nodes[i];
+          var d0 = st.rh + 6, d1 = n.r - n.nr - 5;
+          if (rho > d0 && rho < d1 + 30) {
+            var hd = Math.min(rho, d1), tl = Math.max(d0, rho - 46);
+            if (hd > tl) {
+              var gx0 = cx + Math.cos(n.a) * tl, gy0 = cy + Math.sin(n.a) * tl, gx1 = cx + Math.cos(n.a) * hd, gy1 = cy + Math.sin(n.a) * hd;
+              var sg = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+              sg.addColorStop(0, rgba(fc, 0)); sg.addColorStop(1, rgba(fc, 0.95 * (1 - smooth(d1, d1 + 30, rho))));
+              ctx.strokeStyle = sg;
+              ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx1, gy1); ctx.stroke();
+            }
+          }
+        }
+        // the wavefront itself
+        maskedCircle(ctx, cx, cy, rho, st.boxes.concat([st.homeBox]));
         ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(fc, 0.7 * fa); ctx.stroke();
       }
 
@@ -759,47 +910,37 @@
         ctx.globalAlpha = 1;
       }
 
-      // nodes
+      // glows sit under the baked discs
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        var lit = st.lit[i], nc = n.ring === 1 ? mix(orange, COL.amber, 0.25) : sky, ink = n.ring === 1 ? COL.orangeInk : COL.skyInk;
-        if (lit > 0.01) glowDot(ctx, n.x, n.y, n.nr + 16, nc, 0.24 * lit);
-        if (n.ring === 1) {
-          ctx.beginPath(); ctx.arc(n.x, n.y, n.nr + 5, 0, TAU);
-          ctx.lineWidth = 1; ctx.strokeStyle = rgba(nc, 0.3 + 0.35 * lit); ctx.stroke();
-        }
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.nr, 0, TAU);
-        softShadow(ctx, 6, 1.5, 0.12);
-        ctx.fillStyle = rgba(mix(COL.white, nc, 0.12 + 0.88 * lit), 1); ctx.fill();
-        noShadow(ctx);
-        ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
-        ctx.font = '500 ' + st.fs + 'px ' + MONO; ctx.textBaseline = 'alphabetic';
-        ctx.fillStyle = rgba(mix(COL.muted, ink, lit), 1);
-        for (var li = 0; li < n.lines.length; li++) fillSpaced(ctx, n.lines[li], n.lx, n.ly + li * st.lh, st.ls, 'center');
+        if (st.lit[i] > 0.01) glowDot(ctx, n.x, n.y, n.nr + 16, this.nodeCol(n), 0.24 * st.lit[i]);
       }
-
-      // the home: an orange centre
       var hm = st.home;
       glowDot(ctx, cx, cy, st.rh * 1.75, orange, 0.1 + 0.12 * hm);
-      ctx.beginPath(); ctx.arc(cx, cy, st.rh + 7 + 8 * easeOut(1 - hm), 0, TAU);
-      ctx.lineWidth = 1.25; ctx.strokeStyle = rgba(orange, 0.45 * hm); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy, st.rh, 0, TAU);
-      softShadow(ctx, 18, 6, 0.12);
-      ctx.fillStyle = '#fff'; ctx.fill();
-      noShadow(ctx);
-      var hg = ctx.createRadialGradient(cx, cy - st.rh * 0.4, st.rh * 0.1, cx, cy, st.rh);
-      hg.addColorStop(0, rgba(COL.orangeSoft, 1)); hg.addColorStop(1, rgba(COL.amber, 0.2 + 0.08 * hm));
-      ctx.fillStyle = hg; ctx.fill();
-      var hs = ctx.createLinearGradient(cx - st.rh, cy - st.rh, cx + st.rh, cy + st.rh);
-      hs.addColorStop(0, rgba(COL.amber, 1)); hs.addColorStop(1, rgba(orange, 1));
-      ctx.lineWidth = 2; ctx.strokeStyle = hs; ctx.stroke();
-      // a small roof line above the words
-      var rw = st.rh * 0.26, ry = cy - st.homeFs * 0.95;
-      ctx.beginPath(); ctx.moveTo(cx - rw, ry + rw * 0.55); ctx.lineTo(cx, ry - rw * 0.15); ctx.lineTo(cx + rw, ry + rw * 0.55);
-      ctx.lineWidth = 1.75; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = rgba(orange, 1); ctx.stroke();
-      ctx.font = '600 ' + st.homeFs + 'px ' + DISP; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = rgba(COL.head, 1);
-      ctx.fillText('The Home', cx, cy + st.homeFs * 0.42);
+      if (hm > 0.01) {
+        ctx.beginPath(); ctx.arc(cx, cy, st.rh + 7 + 8 * easeOut(1 - hm), 0, TAU);
+        ctx.lineWidth = 1.25; ctx.strokeStyle = rgba(orange, 0.45 * hm); ctx.stroke();
+      }
+
+      blitLayer(h, ctx, st.top);
+
+      // lit discs and labels
+      for (i = 0; i < st.nodes.length; i++) {
+        n = st.nodes[i];
+        var lit = st.lit[i], nc = this.nodeCol(n);
+        if (lit > 0.01) {
+          if (n.ring === 1) {
+            ctx.beginPath(); ctx.arc(n.x, n.y, n.nr + 5, 0, TAU);
+            ctx.lineWidth = 1; ctx.strokeStyle = rgba(nc, 0.35 * lit); ctx.stroke();
+          }
+          ctx.beginPath(); ctx.arc(n.x, n.y, n.nr, 0, TAU);
+          ctx.fillStyle = rgba(mix(COL.white, nc, 0.12 + 0.88 * lit), 1); ctx.fill();
+          ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
+        }
+        var k = smooth(0.22, 0.68, lit), sp = st.labelSprites[i];
+        if (k < 0.995) blitLayer(h, ctx, sp[0], 1 - k);
+        if (k > 0.005) blitLayer(h, ctx, sp[1], k);
+      }
     }
   };
 

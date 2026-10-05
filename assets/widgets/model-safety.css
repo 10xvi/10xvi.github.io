@@ -52,11 +52,12 @@
   text-shadow: 0 0 2px var(--bg, #fff), 0 0 5px var(--bg, #fff);
   will-change: transform;
 }
+/* label text uses the ink tones (AA at 11px); the bright accents stay on the marks */
 [data-widget="world-model"] .ms-lbl-shared {
-  color: var(--sky-deep, #0284c7);
+  color: var(--sky-ink, #0369a1);
 }
 [data-widget="world-model"] .ms-lbl-yours {
-  color: var(--orange, #f97316);
+  color: var(--orange-ink, #c2410c);
 }
 [data-widget="world-model"] .ms-wm-legend {
   flex: 0 0 auto;
@@ -177,7 +178,9 @@
   stroke-linejoin: round;
 }
 [data-widget="safety"] .ms-sf-title { fill: var(--head, #0f172a); font-weight: 500; }
-[data-widget="safety"] .ms-sf-red { fill: var(--red, #ef4444); font-weight: 500; }
+[data-widget="safety"] .ms-sf-red { fill: var(--red-ink, #b91c1c); font-weight: 500; }
+/* a clean white plate behind "Fixed limit", so the hatch never runs into the glyphs */
+[data-widget="safety"] .ms-sf-plate { fill: var(--bg, #ffffff); }
 @media (max-width: 560px) {
   [data-widget="safety"] { height: 260px; }
   [data-widget="safety"] .ms-sf-plot { inset: 0 2px 0 2px; }

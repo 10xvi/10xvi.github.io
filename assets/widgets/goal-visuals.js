@@ -13,7 +13,7 @@
   // so the figures stay in step with the site theme.
   var C = {
     orange: 'var(--orange, #f97316)', amber: 'var(--amber, #f59e0b)', sky: 'var(--sky, #0ea5e9)',
-    skyDeep: 'var(--sky-deep, #0284c7)', red: 'var(--red, #ef4444)', slate: 'var(--muted, #64748b)',
+    red: 'var(--red, #ef4444)', slate: 'var(--muted, #64748b)',
     line2: 'var(--line-2, #cbd5e1)'
   };
   var uid = 0;
@@ -55,13 +55,13 @@
     mk('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#' + id + 'gf)' }, m);
     return { defs: defs, pad: pad, x0: x0, x1: x1, u: u, top: top, W: W, H: H, mask: 'url(#' + id + 'gm)' };
   }
-  function gridPath(svg, P, yBase) {
+  function gridPath(svg, P, yBase, noRule) {
     var d = '', x, y;
     for (x = P.x0; x <= P.W - 1; x += P.u) d += 'M' + px(x) + ' ' + P.top + 'V' + P.H;
     for (y = yBase; y >= P.top + 4; y -= P.u) d += 'M0 ' + px(y) + 'H' + P.W;
     for (y = yBase + P.u; y < P.H; y += P.u) d += 'M0 ' + px(y) + 'H' + P.W;
     mk('path', { d: d, 'class': 'gv-grid', mask: P.mask }, svg);
-    mk('path', { d: 'M0 ' + (P.top - 0.5) + 'H' + P.W, 'class': 'gv-rule' }, svg);
+    if (!noRule) mk('path', { d: 'M0 ' + (P.top - 0.5) + 'H' + P.W, 'class': 'gv-rule' }, svg);
   }
 
   /* ---------- runtime: one rAF loop for all widgets ---------- */
@@ -73,7 +73,9 @@
   }
   function tick(now) {
     raf = 0;
-    var dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+    // 0.12 s cap: slow frames still advance the intros at true speed, while a
+    // tab switch or scroll-away (both pause the loop) cannot cause a jump
+    var dt = last ? Math.min(0.12, (now - last) / 1000) : 0;
     last = now;
     for (var i = 0; i < widgets.length; i++) {
       var w = widgets[i];
@@ -89,10 +91,9 @@
     while (el.firstChild) el.removeChild(el.firstChild);
     var box = document.createElement('div');
     box.className = 'gv-plate';
-    box.setAttribute('aria-hidden', 'true');
     el.appendChild(box);
     var svg = mk('svg', { 'class': 'gv-svg', 'aria-hidden': 'true', focusable: 'false' }, box);
-    var w = factory(svg);
+    var w = factory(svg, box, el);
     w.el = el; w.t = 0; w.visible = false; w.W = 0; w.H = 0;
     function layout() {
       var r = svg.getBoundingClientRect();
@@ -159,7 +160,7 @@
       var gDL = mk('linearGradient', { id: id + 'dl', x1: 0, y1: 0, x2: 1, y2: 0 }, d);
       stop(gDL, '0', C.amber, '1'); stop(gDL, '.32', C.red, '.62'); stop(gDL, '1', C.slate, '.18');
       var gK = mk('linearGradient', { id: id + 'k', x1: 0, y1: 0, x2: 1, y2: 0 }, d);
-      stop(gK, '0', C.red, '.75'); stop(gK, '1', C.slate, '.15');
+      stop(gK, '0', C.red, '.85'); stop(gK, '1', C.red, '.2');
       var gKH = mk('linearGradient', { id: id + 'kh', x1: 0, y1: 0, x2: 1, y2: 0 }, d);
       stop(gKH, '0', C.orange, '1'); stop(gKH, '1', C.amber, '1');
       var gS = mk('linearGradient', { id: id + 's', gradientUnits: 'userSpaceOnUse', x1: -200, y1: 0, x2: -100, y2: 0 }, d);
@@ -170,16 +171,16 @@
       mk('feDropShadow', { dx: 0, dy: 2, stdDeviation: 2.5, 'flood-color': '#c2410c', 'flood-opacity': '.16' }, fl);
       S.shadow = 'url(#' + id + 'sh)';
 
-      gridPath(svg, P, yB);
+      // no header rule here: this row is a colour key, not a tab bar
+      gridPath(svg, P, yB, true);
 
-      // header key (doubles as the legend)
-      var hx = x0, hy = 24;
-      txt(svg, hx, hy, 'Healthy years', 'gv-lbl gv-lbl-hi');
-      var w1 = textW('Healthy years');
-      mk('rect', { x: f(hx), y: hy + 7.5, width: f(w1), height: 3, rx: 1.5, fill: 'url(#' + id + 'kh)' }, svg);
-      var hx2 = hx + w1 + 26;
-      txt(svg, hx2, hy, 'Decline', 'gv-lbl');
-      mk('rect', { x: f(hx2), y: hy + 7.5, width: f(textW('Decline')), height: 3, rx: 1.5, fill: 'url(#' + id + 'k)' }, svg);
+      // header: swatch legend (a key, deliberately unlike the morphology tabs)
+      var hx = x0, hy = 24, sw = 10;
+      mk('rect', { x: f(hx), y: hy - 9, width: sw, height: sw, rx: 2.5, fill: 'url(#' + id + 'kh)', 'class': 'gv-sw' }, svg);
+      txt(svg, hx + sw + 8, hy, 'Healthy years', 'gv-lbl gv-lbl-hi');
+      var hx2 = hx + sw + 8 + textW('Healthy years') + 22;
+      mk('rect', { x: f(hx2), y: hy - 9, width: sw, height: sw, rx: 2.5, fill: 'url(#' + id + 'k)', 'class': 'gv-sw' }, svg);
+      txt(svg, hx2 + sw + 8, hy, 'Decline', 'gv-lbl');
 
       // rows
       S.rows = [row(yA, 'Today', 'gv-lbl gv-lbl-hi', DEC_TODAY), row(yB, '10X', 'gv-lbl gv-lbl-o', DEC_10X)];
@@ -207,7 +208,8 @@
     function row(yb, label, cls, dec) {
       var g = mk('g', null, svg), P = S.P;
       var o = { g: g, yb: yb, dec: dec };
-      o.label = txt(g, S.x0, yb - S.ph - 12, label, cls);
+      // the row label sits outside the fading group, so it is always full contrast
+      o.label = txt(svg, S.x0, yb - S.ph - 12, label, cls);
       mk('path', { d: 'M' + S.x0 + ' ' + px(yb) + 'H' + P.x1, 'class': 'gv-base' }, g);
       o.ticksOff = mk('path', { 'class': 'gv-tick' }, g);
       o.ticksOn = mk('path', { 'class': 'gv-tick gv-tick-on' }, g);
@@ -265,8 +267,8 @@
       if (settled && S.final) { shimmer(t, B); return; }
       S.final = settled;
       var lab = easeOut(seg(t, 0, 0.8));
-      A.g.setAttribute('opacity', f(0.45 + 0.55 * lab));
-      B.g.setAttribute('opacity', f(0.45 + 0.55 * easeOut(seg(t, T_B - 0.6, T_B + 0.2))));
+      A.g.setAttribute('opacity', f(0.7 + 0.3 * lab));
+      B.g.setAttribute('opacity', f(0.7 + 0.3 * easeOut(seg(t, T_B - 0.6, T_B + 0.2))));
       track(A, 1, easeOut(seg(t, T_A, T_A + 0.8)), ease(seg(t, T_A + 0.7, T_A + 1.6)));
       var pg = ease(seg(t, T_B, T_B + GROW));
       var xh = track(B, 10, pg, ease(seg(t, T_B + GROW - 0.05, T_B + GROW + 0.6)));
@@ -334,10 +336,94 @@
   function bump(d, w) { var x = d / w; if (x <= -1 || x >= 1) return 0; x = 1 - x * x; return x * x * x; }
   function smin(a, b, k) { return -k * Math.log(Math.exp(-a / k) + Math.exp(-b / k)); }
 
-  function morphology(svg) {
+  var PH_START = [0, D_M, D_M + D_R], PH_DUR = [D_M, D_R, D_S];
+  // reduced motion: one still frame per phase (steady / damaged and healing / mid-reshape)
+  var PH_STILL = [D_M * 0.5, D_M + 2.6, D_M + D_R + 2.4];
+  var HOLD = 8, BLEND = 0.45;
+
+  function morphology(svg, box, el) {
     var id = 'gvM' + (uid++);
-    var S = {};
+    var S = { off: 0, hold: null, from: null, last: null, rsel: 0, cur: -1, kb: false };
     var N = 120, DOTS = 64, GOLD = Math.PI * (3 - Math.sqrt(5));
+    var self;
+
+    /* Phase tabs: real controls (HTML, outside the aria-hidden SVG). The phases
+       auto-advance; choosing one jumps to it and holds there for a few seconds. */
+    el.setAttribute('role', 'group');
+    var tabs = document.createElement('div');
+    tabs.className = 'gv-tabs';
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Phases');
+    box.id = id + 'panel';
+    box.setAttribute('role', 'tabpanel');
+    S.tabs = [];
+    PH.forEach(function (name, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gv-tab';
+      b.id = id + 'tab' + i;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-controls', box.id);
+      b.setAttribute('aria-label', name); // mixed case, so the uppercase styling is not read letter by letter
+      b.setAttribute('aria-selected', 'false');
+      b.tabIndex = -1;
+      var l = document.createElement('span');
+      l.textContent = name;
+      b.appendChild(l);
+      b.addEventListener('click', function () { goTo(i); });
+      tabs.appendChild(b);
+      S.tabs.push(b);
+    });
+    tabs.addEventListener('keydown', function (e) {
+      var i = S.tabs.indexOf(document.activeElement), n = -1;
+      if (i < 0) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % 3;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i + 2) % 3;
+      else if (e.key === 'Home') n = 0;
+      else if (e.key === 'End') n = 2;
+      if (n < 0) return;
+      e.preventDefault();
+      S.tabs[n].focus();
+      goTo(n);
+    });
+    // keyboard focus in the tabs freezes auto-advance, so the selection does not move under the user
+    tabs.addEventListener('focusin', function (e) {
+      var fv = true;
+      try { fv = e.target.matches(':focus-visible'); } catch (_) {}
+      if (!fv) return;
+      S.kb = true;
+      if (!S.hold && !reduce && self) {
+        var T = self.t + S.off, c = Math.floor(T / CYC), lt = T - c * CYC;
+        var p = lt < D_M ? 0 : lt < D_M + D_R ? 1 : 2;
+        S.hold = { end: c * CYC + PH_START[p] + PH_DUR[p] - 0.001, until: self.t + HOLD };
+      }
+    });
+    tabs.addEventListener('focusout', function (e) {
+      if (e.relatedTarget && tabs.contains(e.relatedTarget)) return;
+      S.kb = false;
+      if (S.hold && self) S.hold.until = Math.max(S.hold.until, self.t + 3);
+      kick();
+    });
+    // tabs and plate share a positioned stage, so the tabs sit on the plate header
+    var stage = document.createElement('div');
+    stage.className = 'gv-stage';
+    el.insertBefore(stage, box);
+    stage.appendChild(tabs);
+    stage.appendChild(box);
+
+    function goTo(p) {
+      if (!self) return;
+      if (reduce) { S.rsel = p; self.draw(); return; }
+      var T = self.t + S.off, c = Math.floor(T / CYC), lt = T - c * CYC;
+      // once the form has started to change in Shape, the next cycle continues from the new form
+      if (lt > D_M + D_R + 1.0) c += 1;
+      var start = c * CYC + PH_START[p];
+      S.from = S.last ? { q: S.last, t0: self.t } : null;
+      S.off = start - self.t;
+      S.hold = { end: start + PH_DUR[p] - 0.001, until: self.t + HOLD };
+      self.draw();
+      kick();
+    }
 
     function build(W, H) {
       var P = plate(svg, W, H, id);
@@ -353,22 +439,8 @@
       mk('path', { d: 'M' + (cx - 6) + ' ' + px(cy) + 'h12M' + px(cx) + ' ' + (cy - 6) + 'v12', 'class': 'gv-cross' }, svg);
 
       var d = P.defs;
-      var gk = mk('linearGradient', { id: id + 'kh', x1: 0, y1: 0, x2: 1, y2: 0 }, d);
-      stop(gk, '0', C.skyDeep, '1'); stop(gk, '1', C.sky, '1');
-
-      // header: phase stepper (same system as the lifespan key)
-      S.steps = [];
-      var x = P.x0, hy = 24;
-      for (var i = 0; i < 3; i++) {
-        var w = textW(PH[i]);
-        var g = mk('g', null, svg);
-        txt(g, x, hy, PH[i], 'gv-lbl');
-        var on = txt(g, x, hy, PH[i], 'gv-lbl gv-lbl-s');
-        mk('rect', { x: f(x), y: hy + 7.5, width: f(w), height: 3, rx: 1.5, 'class': 'gv-track' }, g);
-        var bar = mk('rect', { x: f(x), y: hy + 7.5, height: 3, rx: 1.5, width: 0, fill: 'url(#' + id + 'kh)' }, g);
-        S.steps.push({ on: on, bar: bar, w: w });
-        x += w + 26;
-      }
+      // header: the phase tabs (HTML) line up with the plate's content edge
+      tabs.style.left = (P.pad - 8) + 'px';
 
       // tissue body: soft warm fill, darker toward the rim, gentle drop shadow
       var gw = mk('radialGradient', { id: id + 'in', cx: '46%', cy: '42%', r: '62%' }, d);
@@ -407,14 +479,22 @@
 
     function draw() {
       if (!S.P) return;
-      var t = reduce ? 0 : this.t;
-      var cyc = Math.floor(t / CYC), lt = t - cyc * CYC;
-      var fi = cyc % 3, cur = FORMS[fi], nxt = FORMS[(fi + 1) % 3];
+      var now = self.t, cyc, lt;
+      if (reduce) { cyc = 0; lt = PH_STILL[S.rsel]; }
+      else {
+        var T = now + S.off;
+        if (S.hold) {
+          if (S.kb || now < S.hold.until) {
+            if (T > S.hold.end) { T = S.hold.end; S.off = T - now; }
+          } else S.hold = null;
+        }
+        cyc = Math.floor(T / CYC); lt = T - cyc * CYC;
+      }
+      var fi = ((cyc % 3) + 3) % 3, cur = FORMS[fi], nxt = FORMS[(fi + 1) % 3];
       var phase, pp;
       if (lt < D_M) { phase = 0; pp = lt / D_M; }
       else if (lt < D_M + D_R) { phase = 1; pp = (lt - D_M) / D_R; }
       else { phase = 2; pp = (lt - D_M - D_R) / D_S; }
-      if (reduce) { phase = -1; }
 
       // contour coefficients (inner layers lag slightly while shaping)
       var cOut = cur, cIn1 = cur, cIn2 = cur, cGhost = cur, ghostLift = 0;
@@ -435,10 +515,25 @@
         dmg = easeOut(seg(lr, 0.2, 1.2)) * (1 - ease(seg(lr, 2.0, 4.8)));
         healGlow = Math.sin(Math.PI * seg(lr, 1.9, 5.2));
       }
-      var th0 = NOTCH_AT[fi], NW = 0.62, ND = 0.24 * dmg;
+      var th0 = NOTCH_AT[fi];
+
+      // after a jump between phases, ease from what was on screen instead of snapping
+      var Q = { cOut: cOut, cIn1: cIn1, cIn2: cIn2, cGhost: cGhost, gl: ghostLift, dmg: dmg, heal: healGlow, th0: th0 };
+      if (S.from && !reduce) {
+        var k = (now - S.from.t0) / BLEND;
+        if (k >= 1 || k < 0) S.from = null;
+        else {
+          var q = S.from.q, e = ease(k);
+          Q = { cOut: mix(q.cOut, cOut, e), cIn1: mix(q.cIn1, cIn1, e), cIn2: mix(q.cIn2, cIn2, e), cGhost: mix(q.cGhost, cGhost, e),
+            gl: lerp(q.gl, ghostLift, e), dmg: lerp(q.dmg, dmg, e), heal: lerp(q.heal, healGlow, e), th0: lerp(q.th0, th0, e) };
+        }
+      }
+      S.last = Q;
+      cOut = Q.cOut; cIn1 = Q.cIn1; cIn2 = Q.cIn2; cGhost = Q.cGhost; ghostLift = Q.gl; dmg = Q.dmg; healGlow = Q.heal; th0 = Q.th0;
+      var NW = 0.62, ND = 0.24 * dmg;
 
       // breathing (continuous, never resets)
-      var tb = reduce ? 0 : this.t;
+      var tb = reduce ? 0 : now;
       var br = 1 + 0.014 * Math.sin(TAU * tb / 4.6);
       function rT(c, th) { return (rAt(c, th) + 0.007 * Math.sin(3 * th - 0.8 * tb)) * br; }
       function rO(th) { return rT(cOut, th) - ND * bump(wrap(th - th0), NW); }
@@ -476,18 +571,22 @@
         D.el.setAttribute('opacity', f((0.34 + 0.32 * (1 - D.rho)) * a));
       }
 
-      // stepper
-      for (var s = 0; s < 3; s++) {
-        var st = S.steps[s];
-        var act = phase === -1 ? 1 : (s === phase ? Math.min(1, pp * 12, (1 - pp) * 12) : 0);
-        st.on.setAttribute('opacity', f(act));
-        var bw = phase === -1 ? st.w : (s === phase ? st.w * pp : 0);
-        st.bar.setAttribute('width', f(bw));
-        st.bar.setAttribute('opacity', f(phase === -1 ? 0.55 : 1));
+      // tabs: selection changes only on phase change; the progress bar fills each frame
+      if (phase !== S.cur) {
+        S.cur = phase;
+        for (var s = 0; s < 3; s++) {
+          var on = s === phase;
+          S.tabs[s].setAttribute('aria-selected', on ? 'true' : 'false');
+          S.tabs[s].tabIndex = on ? 0 : -1;
+          if (!on) S.tabs[s].style.setProperty('--p', '0');
+        }
+        box.setAttribute('aria-labelledby', S.tabs[phase].id);
       }
+      S.tabs[phase].style.setProperty('--p', reduce ? '1' : f(pp));
     }
 
-    return { build: build, draw: draw };
+    self = { build: build, draw: draw, reset: function () { S.off = 0; S.hold = null; S.from = null; } };
+    return self;
   }
 
   /* ---------- boot ---------- */
@@ -512,7 +611,7 @@
     kick();
     // inspection hook (no effect unless called): seek all widgets to time t
     window.__goalVisuals = {
-      seek: function (t) { widgets.forEach(function (w) { w.t = t; w.draw(); }); },
+      seek: function (t) { widgets.forEach(function (w) { w.t = t; if (w.reset) w.reset(); w.draw(); }); },
       times: function () { return widgets.map(function (w) { return w.t; }); }
     };
   }
