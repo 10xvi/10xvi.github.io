@@ -348,3 +348,90 @@ h3.mid { font-family: var(--display); font-weight: 700; color: var(--head); font
   .reveal { opacity: 1; transform: none; transition: none; }
   .gradient-text, .hallmarks-head .warn::before { animation: none; }
 }
+
+/* ---------- Review refinements ---------- */
+/* Hero: keep the headline and lede on near-white at every width; nav readable before scrolling */
+.hero::after {
+  background:
+    radial-gradient(70% 75% at 28% 50%, rgba(255, 255, 255, .94) 0%, rgba(255, 255, 255, .78) 45%, rgba(255, 255, 255, 0) 85%),
+    linear-gradient(90deg, rgba(255, 255, 255, .9) 0%, rgba(255, 255, 255, .55) 40%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(0deg, #fff 0%, rgba(255, 255, 255, 0) 22%);
+}
+.nav:not(.scrolled) { background: linear-gradient(180deg, rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .7) 55%, rgba(255, 255, 255, 0) 100%); }
+.hero h1 .gradient-text { width: fit-content; background-size: 100% auto; animation: none; }
+@media (max-width: 860px) {
+  .hero::after { background: linear-gradient(0deg, rgba(255, 255, 255, .96) 0%, rgba(255, 255, 255, .9) 42%, rgba(255, 255, 255, .6) 64%, rgba(255, 255, 255, 0) 88%); }
+}
+@media (max-width: 520px) {
+  .actions .cta { flex: 1 1 100%; justify-content: center; }
+}
+
+/* Section rhythm */
+#goal { padding-bottom: clamp(64px, 7vw, 104px); }
+#goal + #problem { padding-top: clamp(64px, 7vw, 104px); }
+#goal + #problem::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(calc(100% - 2 * var(--gutter)), calc(var(--max) - 2 * var(--gutter))); height: 1px; background: var(--line); }
+#faq { padding-bottom: clamp(88px, 9vw, 128px); }
+.invite { background: #fff; border-top: 1px solid var(--line); padding: clamp(104px, 11vw, 160px) 0; }
+.invite::after { background: radial-gradient(46% 54% at 50% 50%, rgba(255, 255, 255, .95) 0%, rgba(255, 255, 255, .6) 68%, rgba(255, 255, 255, 0) 100%); }
+.head-grid { align-items: start; }
+.head-grid > :last-child { padding-top: 40px; }
+@media (max-width: 900px) { .head-grid > :last-child { padding-top: 0; } }
+
+/* Fewer nested cards */
+.faq { gap: 0; }
+.faq-item, .faq-item:first-child { background: none; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; box-shadow: none; padding: clamp(28px, 3vw, 40px) 0; }
+.faq-item:last-child { border-bottom: 1px solid var(--line-2); }
+.coord-cols { gap: clamp(32px, 5vw, 72px); }
+.coord-cols article { padding: 24px 0 0; background: none; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; box-shadow: none; }
+.coord-cols article:first-child { border-top-color: #fecaca; }
+.coord-cols article:last-child { border-top-color: #bae6fd; }
+.hallmark-list li { border-color: transparent; background: var(--bg-alt); }
+.hallmark-list li:hover { background: #fff; }
+.goal .gv-plate { box-shadow: none; }
+
+/* One positive accent: sky instead of a lone green */
+.compare .new { border-color: #bae6fd; }
+.compare .new .mono { color: var(--sky-deep); }
+.compare .new .mono .ic { background: var(--sky-soft); color: var(--sky-deep); }
+
+/* Text wrapping */
+.hero p, .lead, .intro, .goal p, .faq-item p, .coord-cols article p, .stages p { text-wrap: pretty; }
+.model h4, .aside-card h4, .invite .call { text-wrap: balance; }
+.medicine .text p { max-width: 62ch; }
+
+/* Tablet and phone */
+@media (max-width: 1100px) {
+  .problem-top { display: block; }
+  .problem-top > .copy { position: static; }
+  .problem-top > .hallmarks { margin-top: 48px; }
+}
+@media (min-width: 641px) and (max-width: 900px) {
+  .medicine > div:last-child { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .medicine .aside-card + .aside-card { margin-top: 0; }
+}
+@media (max-width: 1180px) {
+  .menu-btn { min-height: 44px; padding: 0 18px; }
+  .brand { min-height: 44px; }
+  .mobile-menu.open { animation: menu-in .22s cubic-bezier(.2, .7, .2, 1); }
+}
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } }
+.site-foot a { display: inline-block; padding: 12px 0; margin: -12px 0; }
+@media (max-width: 520px) {
+  .hallmarks { padding: 16px; }
+  .hallmark-list { gap: 6px; }
+  .hallmark-list li { padding: 8px 10px 8px 8px; font-size: 14.5px; }
+  .hallmark-list li .ic { width: 28px; height: 28px; }
+  .freedom { padding: 24px 18px; border-radius: 22px; }
+  .aims { margin-top: 28px; gap: 8px; }
+  .aims li { padding: 12px 14px; font-size: 16px; }
+}
+
+/* Touch: don't leave hover states stuck after a tap */
+@media (hover: none) {
+  .hallmark-list li:hover, .aims li:hover, .cta-primary:hover, .cta-ghost:hover { transform: none; }
+  .hallmark-list li:hover { box-shadow: none; background: var(--bg-alt); }
+  .hallmark-list li.key:hover { background: var(--sky-soft); }
+  .aims li:hover { box-shadow: var(--shadow-sm); border-color: var(--line); }
+  .cta-primary:hover::before { opacity: 0; }
+  .invite .email:hover { color: var(--head); }
+}

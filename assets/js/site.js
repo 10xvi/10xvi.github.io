@@ -26,6 +26,14 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && menu.classList.contains('open')) setMenu(false);
     });
+    // A tap outside the open menu closes it instead of reaching the page underneath.
+    document.addEventListener('click', function (e) {
+        if (menu.classList.contains('open') && !e.target.closest('#nav')) {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenu(false);
+        }
+    }, true);
 
     var reveals = document.querySelectorAll('.reveal');
     if ('IntersectionObserver' in window) {

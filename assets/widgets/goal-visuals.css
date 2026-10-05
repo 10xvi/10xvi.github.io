@@ -77,3 +77,6 @@
 [data-widget="morphology"] .gv-form    { fill: none; stroke: var(--orange, #f97316); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
 [data-widget="morphology"] .gv-dmg     { fill: none; stroke: var(--red, #ef4444); stroke-width: 1.5; stroke-dasharray: 3 3; stroke-linecap: round; }
 [data-widget="morphology"] .gv-heal    { fill: none; stroke: var(--sky, #0ea5e9); stroke-width: 6; stroke-linecap: round; }
+
+/* full 10X span, shown faintly before and under the growing bar */
+[data-widget="lifespan"] .gv-target { fill: rgba(249, 115, 22, .05); stroke: rgba(249, 115, 22, .5); stroke-width: 1; stroke-dasharray: 3 3; }

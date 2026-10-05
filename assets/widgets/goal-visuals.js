@@ -190,6 +190,9 @@
 
       // 10X extras: column dividers, sheen sweep, growth head
       var R = S.rows[1];
+      // faint outline of the full 10X span, so the ratio reads before the bar finishes growing
+      var tgt = mk('rect', { x: f(x0), y: f(yB - ph), width: f(10 * u), height: f(ph), rx: 4, 'class': 'gv-target' }, R.g);
+      R.g.insertBefore(tgt, R.g.firstChild);
       S.div = mk('path', { 'class': 'gv-div' }, R.g);
       // the sheen fades out toward the baseline (vertical mask), so it reads as a light catch
       var gM = mk('linearGradient', { id: id + 'mg', x1: 0, y1: 0, x2: 0, y2: 1 }, d);

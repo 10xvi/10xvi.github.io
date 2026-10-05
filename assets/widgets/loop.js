@@ -291,7 +291,9 @@
     function goTo(k) {
       // shortest way round to station k
       var base = Math.round(p);
-      var cand = base + (mod(k - mod(base, 6) + 3, 6) - 3);
+      // ties (three stations away) go forward, in the direction the loop runs
+      var dlt = mod(k - mod(base, 6), 6); if (dlt > 3) dlt -= 6;
+      var cand = base + dlt;
       if (Math.abs(cand - p) < 0.001 && mode !== 'travel') { mode = 'hold'; return; }
       fromP = p; toP = cand; tMode = 0;
       travelDur = 0.45 + 0.16 * Math.abs(cand - p);
@@ -346,7 +348,8 @@
         stGlow[i] += (target - stGlow[i]) * (1 - Math.exp(-dt / 0.12));
         if (arrive[i] > 0) { arrive[i] += dt / 1.4; if (arrive[i] >= 1) arrive[i] = 0; }
       }
-      setActive(nearest());
+      // a hovered/focused step stays lit in the list at once; the head still travels to it
+      setActive(hovering >= 0 ? hovering : nearest());
 
       // Learn feeds the model
       if (feed === -2) {
@@ -769,6 +772,7 @@
       hovering = k;
       if (reduced) { staticFrame(k); return; }
       goTo(k);
+      setActive(k);
       if (!raf) draw();
     }
     function release(k) {
