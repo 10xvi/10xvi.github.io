@@ -1,0 +1,79 @@
+/* Goal visuals (light): [data-widget="lifespan"] + [data-widget="morphology"]
+   A matched pair of small figure cards: same height, same label system. */
+:where([data-widget="lifespan"], [data-widget="morphology"]) {
+  margin-top: clamp(28px, 3vw, 40px);
+}
+[data-widget="lifespan"],
+[data-widget="morphology"] {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+[data-widget="lifespan"] > .gv-plate,
+[data-widget="morphology"] > .gv-plate {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 248px;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 90% at 50% 100%, var(--bg-alt, #f8fafc), rgba(248, 250, 252, 0) 70%),
+    var(--bg, #ffffff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12);
+  overflow: hidden;
+  contain: layout paint;
+}
+@media (max-width: 600px) {
+  [data-widget="lifespan"] > .gv-plate,
+  [data-widget="morphology"] > .gv-plate { height: 232px; border-radius: 14px; }
+}
+
+[data-widget="lifespan"] .gv-svg,
+[data-widget="morphology"] .gv-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* label system (shared) */
+[data-widget] .gv-svg .gv-lbl {
+  font-family: var(--mono, "JetBrains Mono"), ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  fill: var(--muted, #64748b);
+}
+[data-widget] .gv-svg .gv-lbl-hi { fill: var(--head, #0f172a); }
+[data-widget] .gv-svg .gv-lbl-o  { fill: var(--orange, #f97316); }
+[data-widget] .gv-svg .gv-lbl-s  { fill: var(--sky-deep, #0284c7); }
+
+/* grid language (shared): fine slate hairlines */
+[data-widget] .gv-svg .gv-grid  { fill: none; stroke: var(--line, #e2e8f0); stroke-width: 1; opacity: .75; }
+[data-widget] .gv-svg .gv-rule  { fill: none; stroke: var(--line, #e2e8f0); stroke-width: 1; }
+[data-widget] .gv-svg .gv-track { fill: var(--line, #e2e8f0); }
+
+/* lifespan */
+[data-widget="lifespan"] .gv-line   { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+[data-widget="lifespan"] .gv-line-h { stroke: var(--orange, #f97316); }
+[data-widget="lifespan"] .gv-base   { fill: none; stroke: var(--line-2, #cbd5e1); stroke-width: 1; }
+[data-widget="lifespan"] .gv-tick   { fill: none; stroke: var(--line-2, #cbd5e1); stroke-width: 1; }
+[data-widget="lifespan"] .gv-tick-on { stroke: var(--orange, #f97316); }
+[data-widget="lifespan"] .gv-guide  { fill: none; stroke: var(--muted, #64748b); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 2 3; }
+[data-widget="lifespan"] .gv-div    { fill: none; stroke: #ffffff; stroke-opacity: .7; stroke-width: 1; }
+[data-widget="lifespan"] .gv-head   { fill: #ffffff; stroke: var(--orange, #f97316); stroke-width: 1.5; }
+[data-widget="lifespan"] .gv-halo   { fill: var(--amber, #f59e0b); }
+
+/* morphology */
+[data-widget="morphology"] .gv-cross   { fill: none; stroke: var(--line-2, #cbd5e1); stroke-width: 1; }
+[data-widget="morphology"] .gv-ghost   { fill: none; stroke: var(--sky, #0ea5e9); stroke-width: 1.25; stroke-dasharray: 2 4; stroke-linecap: round; }
+[data-widget="morphology"] .gv-inner   { fill: none; stroke: var(--amber, #f59e0b); stroke-width: 1; stroke-linejoin: round; }
+[data-widget="morphology"] .gv-dots    { fill: var(--orange, #f97316); }
+[data-widget="morphology"] .gv-form    { fill: none; stroke: var(--orange, #f97316); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+[data-widget="morphology"] .gv-dmg     { fill: none; stroke: var(--red, #ef4444); stroke-width: 1.5; stroke-dasharray: 3 3; stroke-linecap: round; }
+[data-widget="morphology"] .gv-heal    { fill: none; stroke: var(--sky, #0ea5e9); stroke-width: 6; stroke-linecap: round; }

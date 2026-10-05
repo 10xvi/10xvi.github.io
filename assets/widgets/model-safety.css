@@ -1,0 +1,184 @@
+/* 10X Vital Intelligence (light): model-safety widgets, scoped to their mounts */
+
+/* the world model draws its own card: white, fine slate hairline, soft shadow.
+   The safety chart sits directly on the page's white safety panel. */
+[data-widget="world-model"] {
+  box-sizing: border-box;
+  background: var(--bg, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -12px rgba(15, 23, 42, .12);
+}
+
+/* ---------- (a) Vital World Model ---------- */
+[data-widget="world-model"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 460px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+}
+[data-widget="world-model"] .ms-wm-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+[data-widget="world-model"] .ms-wm-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+[data-widget="world-model"] .ms-lbl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 4px 7px 4px calc(7px + .14em); /* balance the trailing letter-spacing */
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .88);
+  text-shadow: 0 0 2px var(--bg, #fff), 0 0 5px var(--bg, #fff);
+  will-change: transform;
+}
+[data-widget="world-model"] .ms-lbl-shared {
+  color: var(--sky-deep, #0284c7);
+}
+[data-widget="world-model"] .ms-lbl-yours {
+  color: var(--orange, #f97316);
+}
+[data-widget="world-model"] .ms-wm-legend {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
+  gap: 10px 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line, #e2e8f0);
+  font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted, #64748b);
+}
+[data-widget="world-model"].ms-wm-wide .ms-wm-legend {
+  grid-template-columns: repeat(4, max-content);
+  gap: 10px 22px;
+}
+[data-widget="world-model"] .ms-wm-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+[data-widget="world-model"] .ms-wm-key svg {
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+@media (max-width: 900px) {
+  [data-widget="world-model"] { height: 440px; }
+}
+@media (max-width: 560px) {
+  [data-widget="world-model"] { height: 420px; padding: 10px 10px 14px; }
+  [data-widget="world-model"] .ms-wm-legend { gap: 10px 20px; }
+}
+
+/* ---------- (b) How It Stays Safe ---------- */
+[data-widget="safety"] {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  min-width: 0;
+}
+[data-widget="safety"] .ms-sf-plot {
+  position: absolute;
+  inset: 0 6px 0 4px;
+}
+@media (max-width: 960px) {
+  [data-widget="safety"] { height: 300px; }
+}
+[data-widget="safety"] .ms-sf-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  overflow: visible;
+}
+[data-widget="safety"] .ms-sf-axis {
+  stroke: var(--line-2, #cbd5e1);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+[data-widget="safety"] .ms-sf-grid line {
+  stroke: var(--line, #e2e8f0);
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+}
+[data-widget="safety"] .ms-sf-limit {
+  stroke: var(--red, #ef4444);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+[data-widget="safety"] .ms-sf-limit-cap {
+  stroke: var(--red, #ef4444);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+[data-widget="safety"] .ms-sf-curve {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+[data-widget="safety"] .ms-sf-drop,
+[data-widget="safety"] .ms-sf-across {
+  stroke: var(--sky-deep, #0284c7);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  stroke-linecap: round;
+}
+[data-widget="safety"] .ms-sf-drop { stroke-opacity: .6; }
+[data-widget="safety"] .ms-sf-across { stroke-opacity: .35; }
+[data-widget="safety"] .ms-sf-bar { fill: var(--sky, #0ea5e9); }
+[data-widget="safety"] .ms-sf-tick { fill: var(--sky, #0ea5e9); }
+[data-widget="safety"] .ms-sf-halo-ring {
+  fill: none;
+  stroke: var(--sky, #0ea5e9);
+  stroke-width: 1;
+}
+[data-widget="safety"] .ms-sf-dot {
+  fill: var(--bg, #ffffff);
+  stroke: var(--sky, #0ea5e9);
+  stroke-width: 2;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, .18));
+}
+[data-widget="safety"] .ms-sf-t {
+  font-family: var(--mono, "JetBrains Mono", ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  fill: var(--muted, #64748b);
+  paint-order: stroke;
+  stroke: var(--bg, #ffffff);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+[data-widget="safety"] .ms-sf-title { fill: var(--head, #0f172a); font-weight: 500; }
+[data-widget="safety"] .ms-sf-red { fill: var(--red, #ef4444); font-weight: 500; }
+@media (max-width: 560px) {
+  [data-widget="safety"] { height: 260px; }
+  [data-widget="safety"] .ms-sf-plot { inset: 0 2px 0 2px; }
+}

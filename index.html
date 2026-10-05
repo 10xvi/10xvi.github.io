@@ -46,7 +46,8 @@
             z-index: 2147483000;
             width: 100%;
             height: 100%;
-            font-size: 1em;
+            font-size: 16px;
+            line-height: 1.5;
             color: #000;
             -webkit-font-smoothing: antialiased;
         }
@@ -168,166 +169,26 @@
         #gate .gate-btn:hover { opacity: .8; }
     </style>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@1.49.0/dist/umd/lucide.min.js"></script>
-    <!-- Three.js for 3D Background -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-
-        :root {
-            /* Solar Vitality Palette - Enforced Light Mode */
-            --primary: #f97316; /* Vitality Orange */
-            --secondary: #0ea5e9; /* Optimism Sky */
-            --bg-main: #ffffff; /* Clean White */
-            --bg-alt: #f8fafc; /* Slate 50 */
-            --glass: rgba(255, 255, 255, 0.7);
-            --glass-border: rgba(0, 0, 0, 0.05);
-            --text-main: #0f172a; /* Slate 900 */
-            --text-muted: #475569; /* Slate 600 */
-        }
-
-        /* RESET & SCROLL BEHAVIOR */
-        html {
-            scroll-behavior: smooth;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-main);
-            color: var(--text-muted);
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-            width: 100%;
-        }
-
-        h1, h2, h3, h4, .font-display {
-            font-family: 'Space Grotesk', sans-serif;
-            color: var(--text-main);
-        }
-
-        /* Optimize touch targets for mobile */
-        button, a {
-            touch-action: manipulation;
-            cursor: pointer; /* Force pointer cursor */
-        }
-
-        /* Ensure mobile menu button is always clickable */
-        #mobile-menu-btn {
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Custom Animations */
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.1); }
-            50% { box-shadow: 0 0 40px rgba(249, 115, 22, 0.2); }
-        }
-
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
-        }
-
-        @keyframes gradient-x {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        @keyframes spin-slow {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        @keyframes spin-reverse-slow {
-            0% { transform: rotate(360deg); }
-            100% { transform: rotate(0deg); }
-        }
-        
-        @keyframes dash {
-            to { stroke-dashoffset: -100; }
-        }
-        
-        @keyframes particle-up {
-            0% { top: 100%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { top: 0%; opacity: 0; }
-        }
-
-        .animate-float {
-            animation: float 6s ease-in-out infinite;
-        }
-
-        .animate-spin-slow {
-            animation: spin-slow 8s linear infinite;
-        }
-        
-        .animate-spin-reverse-slow {
-            animation: spin-reverse-slow 10s linear infinite;
-        }
-        
-        .animate-dash {
-            animation: dash 3s linear infinite;
-        }
-        .animate-dash-reverse {
-            animation: dash 3s linear infinite reverse;
-        }
-        
-        .animate-particle-up {
-            animation: particle-up 3s infinite linear;
-        }
-
-        .gradient-text {
-            background: linear-gradient(to right, #f97316, #f59e0b, #0ea5e9);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-size: 200% auto;
-            animation: gradient-x 6s linear infinite;
-        }
-
-        .glass-card {
-            background: var(--glass);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        }
-
-        .bio-grid-bg {
-            background-image: 
-                linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
-            background-size: 40px 40px;
-        }
-
-        /* Scroll Reveal Utility */
-        .reveal {
-            opacity: 0;
-            transform: translateY(30px);
-            transition: all 0.8s ease-out;
-        }
-        .reveal.active {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="assets/css/site.css">
+    <link rel="stylesheet" href="assets/widgets/hero-field.css">
+    <link rel="stylesheet" href="assets/widgets/goal-visuals.css">
+    <link rel="stylesheet" href="assets/widgets/coordination.css">
+    <link rel="stylesheet" href="assets/widgets/loop.css">
+    <link rel="stylesheet" href="assets/widgets/model-safety.css">
+    <link rel="stylesheet" href="assets/widgets/conversation-path.css">
+    <script defer src="https://unpkg.com/lucide@1.49.0/dist/umd/lucide.min.js"></script>
+    <script defer src="assets/js/site.js"></script>
+    <script defer src="assets/widgets/hero-field.js"></script>
+    <script defer src="assets/widgets/goal-visuals.js"></script>
+    <script defer src="assets/widgets/coordination.js"></script>
+    <script defer src="assets/widgets/loop.js"></script>
+    <script defer src="assets/widgets/model-safety.js"></script>
+    <script defer src="assets/widgets/conversation-path.js"></script>
 </head>
-<body class="antialiased selection:bg-orange-200 selection:text-orange-900">
+<body>
 
     <!-- Guest Area -->
     <div id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
@@ -424,12 +285,13 @@
                 gate.remove();
                 document.documentElement.classList.remove('gate-locked');
                 document.title = 'Home | 10X';
+                document.dispatchEvent(new Event('site:unlocked'));
                 // The scrollbar only appears now; let the page's resize handlers (the hero canvas) re-measure.
                 window.dispatchEvent(new Event('resize'));
                 var id = location.hash.slice(1);
                 try { id = decodeURIComponent(id); } catch (e) {}
                 var target = id && document.getElementById(id);
-                if (target) target.scrollIntoView();
+                if (target) target.scrollIntoView({ behavior: 'instant', block: 'start' });
             }
 
             // Like Wix, the message goes away as soon as the visitor starts typing again.
@@ -452,1073 +314,361 @@
         })();
     </script>
 
-    <!-- Navigation -->
-    <nav class="fixed w-full z-[100] top-0 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-slate-200" id="navbar">
-        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center relative">
-            <a href="#" class="text-2xl font-bold font-display tracking-tighter hover:text-orange-500 transition-colors pointer-events-auto relative z-[101]">
-                10X <span class="font-light text-slate-400">Vital Intelligence</span>
-            </a>
-            
-            <!-- Desktop Menu -->
-            <div class="hidden xl:flex items-center space-x-6 relative z-[101]">
-                <div class="flex space-x-5 text-xs font-medium tracking-wide uppercase pointer-events-auto text-slate-600">
-                    <a href="#goal" class="hover:text-orange-500 transition-colors">The 10X</a>
-                    <a href="#problem" class="hover:text-orange-500 transition-colors">The Problem</a>
-                    <a href="#solution" class="hover:text-orange-500 transition-colors">The Key</a>
-                    <a href="#paradigm" class="hover:text-orange-500 transition-colors">The Paradigm Shift</a>
-                    <a href="#vision" class="hover:text-orange-500 transition-colors">The Path</a>
-                    <a href="#imperative" class="hover:text-orange-500 transition-colors">The Imperative</a>
-                    <a href="#faq" class="hover:text-orange-500 transition-colors">FAQ</a>
-                </div>
-                <a href="#contact" class="pointer-events-auto inline-flex items-center justify-center px-5 py-2 text-xs font-bold uppercase tracking-wide text-white transition-all duration-200 bg-slate-900 rounded-full hover:bg-orange-500 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 shadow-lg">
-                    Get Involved
-                </a>
-            </div>
-
-            <!-- Mobile Menu Button -->
-            <button id="mobile-menu-btn" class="xl:hidden text-slate-900 p-2 -mr-2 hover:text-orange-500 transition-colors focus:outline-none select-none cursor-pointer relative z-[101] pointer-events-auto" aria-label="Toggle Menu">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="4" x2="20" y1="12" y2="12"></line>
-                    <line x1="4" x2="20" y1="6" y2="6"></line>
-                    <line x1="4" x2="20" y1="18" y2="18"></line>
-                </svg>
-            </button>
+    <header class="nav" id="nav">
+        <div class="wrap nav-in">
+            <a class="brand" href="#top" aria-label="10X Vital Intelligence, back to top"><i aria-hidden="true"></i><span><b>10X</b> <span>Vital Intelligence</span></span></a>
+            <nav class="links" aria-label="Sections">
+                <a href="#goal">The 10X</a>
+                <a href="#problem">The Problem</a>
+                <a href="#solution">The Key</a>
+                <a href="#paradigm">The Paradigm Shift</a>
+                <a href="#vision">The Path</a>
+                <a href="#imperative">The Imperative</a>
+                <a href="#faq">FAQ</a>
+                <a class="cta cta-primary" href="#contact">Get Involved</a>
+            </nav>
+            <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
         </div>
-        
-        <!-- Mobile Menu -->
-        <div id="mobile-menu" class="hidden absolute top-full left-0 w-full bg-white/95 backdrop-blur-xl border-b border-slate-100 p-6 xl:hidden shadow-2xl z-[100] pointer-events-auto text-slate-900">
-            <div class="flex flex-col space-y-4 text-center">
-                <a href="#goal" class="py-4 border-b border-slate-100 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">The 10X</a>
-                <a href="#problem" class="py-4 border-b border-slate-100 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">The Problem</a>
-                <a href="#solution" class="py-4 border-b border-slate-100 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">The Key</a>
-                <a href="#paradigm" class="py-4 border-b border-slate-100 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">The Paradigm Shift</a>
-                <a href="#vision" class="py-4 border-b border-slate-100 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">The Path</a>
-                <a href="#imperative" class="py-4 border-b border-slate-100 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">The Imperative</a>
-                <a href="#faq" class="py-4 hover:text-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase text-slate-600">FAQ</a>
-                <a href="#contact" class="py-3 mt-2 bg-slate-900 text-white font-bold hover:bg-orange-500 transition-colors block w-full text-sm font-medium tracking-wide uppercase rounded-full shadow-md">Get Involved</a>
-            </div>
+        <div class="mobile-menu" id="mobile-menu">
+            <a href="#goal">The 10X</a>
+            <a href="#problem">The Problem</a>
+            <a href="#solution">The Key</a>
+            <a href="#paradigm">The Paradigm Shift</a>
+            <a href="#vision">The Path</a>
+            <a href="#imperative">The Imperative</a>
+            <a href="#faq">FAQ</a>
+            <a class="go" href="#contact">Get Involved</a>
         </div>
-    </nav>
+    </header>
 
-    <!-- Wrapper -->
-    <div class="overflow-x-hidden w-full relative">
-
-        <!-- Hero Section -->
-        <section class="relative h-[850px] flex items-center justify-center pt-20 overflow-hidden">
-            <!-- 3D Canvas Background -->
-            <div id="hero-canvas" class="absolute inset-0 -z-10 pointer-events-none opacity-100"></div>
-            
-            <!-- Overlay Gradient (Lightest touch to let colors pop) -->
-            <div class="absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-transparent to-white pointer-events-none"></div>
-
-            <div class="relative z-10 max-w-5xl mx-auto px-6 text-center">
-                
-                <h1 class="text-5xl md:text-7xl lg:text-8xl font-bold font-display leading-tight mb-6 pointer-events-auto text-slate-900 drop-shadow-sm">
-                    <span class="gradient-text">10X</span> Vital Intelligence
-                </h1>
-                
-                <p class="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed pointer-events-auto bg-white/40 backdrop-blur-sm p-4 rounded-xl border border-white/20 shadow-sm">
-                    This is an initiative for a new paradigm in vitality and medicine. The 10X in the name stands for at least ten times the healthy human lifespan, together with control over the form of the body.
-                </p>
-                
-                <div class="flex flex-col sm:flex-row justify-center items-center gap-4 relative z-30 pointer-events-auto">
-                    <a href="#contact" class="group relative px-8 py-4 bg-slate-900 text-white font-bold rounded-full overflow-hidden transition-all hover:scale-105 cursor-pointer shadow-xl shadow-orange-500/20">
-                        <div class="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <span class="relative z-10 transition-colors">Get Involved</span>
-                    </a>
-                    <a href="#goal" class="px-8 py-4 text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-2 cursor-pointer bg-white border border-slate-200 rounded-full hover:bg-slate-50 shadow-sm">
-                        Explore the Idea <i data-lucide="arrow-down" class="w-4 h-4"></i>
+    <main id="top">
+        <!-- Hero -->
+        <section class="hero">
+            <canvas data-widget="hero-field" aria-hidden="true"></canvas>
+            <div class="wrap hero-in">
+                <h1><span class="x gradient-text">10X</span> Vital Intelligence</h1>
+                <p>This is an initiative for a new paradigm in vitality and medicine. The 10X in the name stands for at least ten times the healthy human lifespan, together with control over the form of the body.</p>
+                <div class="actions">
+                    <a class="cta cta-primary" href="#contact">Get Involved</a>
+                    <a class="cta cta-ghost" href="#goal">Explore the Idea
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3.5 8.5 8 13l4.5-4.5"/></svg>
                     </a>
                 </div>
             </div>
+            <span class="scroll-cue mono" aria-hidden="true">Scroll</span>
         </section>
 
-        <!-- The Goal: what the 10X means -->
-        <section id="goal" class="py-24 relative bg-white">
-            <div class="max-w-7xl mx-auto px-6">
-                <div class="text-center mb-16 reveal">
-                    <span class="text-orange-500 font-mono text-sm tracking-widest uppercase mb-2 block font-bold">What the 10X Means</span>
-                    <h2 class="text-4xl md:text-5xl font-bold font-display mb-6 text-slate-900 text-balance">Ten Times the Healthy Lifespan, and Control Over Form</h2>
-                    <p class="text-slate-600 text-lg max-w-3xl mx-auto leading-relaxed">
-                        The number in the name stands for two goals. One is about how long people stay well, and the other is about the form of the body itself.
-                    </p>
+        <!-- 01 What the 10X means -->
+        <section class="block" id="goal">
+            <div class="wrap">
+                <div class="head-grid reveal">
+                    <div>
+                        <div class="label mono"><span class="n">01</span><span class="dot"></span><span>What the 10X Means</span></div>
+                        <h2>Ten Times the Healthy Lifespan, and Control Over Form</h2>
+                    </div>
+                    <p class="intro">The number in the name stands for two goals. One is about how long people stay well, and the other is about the form of the body itself.</p>
                 </div>
 
-                <div class="grid md:grid-cols-2 gap-8">
-                    <div class="glass-card rounded-2xl p-8 md:p-10 border border-orange-100 bg-white reveal delay-100">
-                        <div class="w-14 h-14 rounded-full bg-orange-50 border border-orange-100 flex items-center justify-center mb-6 text-orange-500">
-                            <i data-lucide="hourglass" class="w-7 h-7"></i>
-                        </div>
-                        <div class="text-6xl font-bold font-display mb-2"><span class="gradient-text">10X</span></div>
-                        <h3 class="text-2xl font-bold font-display text-slate-900 mb-4">Healthy Lifespan</h3>
-                        <p class="text-slate-600 leading-relaxed">
-                            The first goal is at least ten times as many years in good health as people have today. Those added years should be strong and clear-headed, and the period of decline at the end of life should shrink.
-                        </p>
-                    </div>
-
-                    <div class="glass-card rounded-2xl p-8 md:p-10 border border-sky-100 bg-white reveal delay-200">
-                        <div class="w-14 h-14 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center mb-6 text-sky-500">
-                            <i data-lucide="fingerprint" class="w-7 h-7"></i>
-                        </div>
-                        <div class="text-6xl font-bold font-display mb-2 text-sky-500">Form</div>
-                        <h3 class="text-2xl font-bold font-display text-slate-900 mb-4">Control Over Morphology</h3>
-                        <p class="text-slate-600 leading-relaxed">
-                            Morphology is the body's form: its shape, its structure, and the way its tissues grow, heal and hold their pattern. The paradigm aims to let people maintain and repair that form, and in time to shape it by choice.
-                        </p>
-                    </div>
+                <div class="goals">
+                    <article class="goal a reveal">
+                        <div class="tag mono"><span>Goal 1</span><span>Lifespan</span></div>
+                        <div class="fig">10X</div>
+                        <h3>Healthy Lifespan</h3>
+                        <p>The first goal is at least ten times as many years in good health as people have today. Those added years should be strong and clear-headed, and the period of decline at the end of life should shrink.</p>
+                        <div class="widget" data-widget="lifespan" role="img" aria-label="Healthy years today compared with at least ten times as many healthy years, and a shorter decline at the end"></div>
+                    </article>
+                    <article class="goal b reveal">
+                        <div class="tag mono"><span>Goal 2</span><span>Morphology</span></div>
+                        <div class="fig">Form</div>
+                        <h3>Control Over Morphology</h3>
+                        <p>Morphology is the body's form: its shape, its structure, and the way its tissues grow, heal and hold their pattern. The paradigm aims to let people maintain and repair that form, and in time to shape it by choice.</p>
+                        <div class="widget" data-widget="morphology" role="img" aria-label="A form being maintained, repaired and then reshaped by choice"></div>
+                    </article>
                 </div>
             </div>
         </section>
 
-        <!-- The Problem: Hallmarks of Aging -->
-        <section id="problem" class="py-24 relative bg-white">
-            <div class="max-w-7xl mx-auto px-6">
-                <div class="grid md:grid-cols-5 gap-12 items-center">
-                    <!-- Text Content -->
-                    <div class="md:col-span-2 reveal">
-                        <span class="text-orange-500 font-mono text-sm tracking-widest uppercase mb-2 block font-bold">The Problem</span>
-                        <h2 class="text-4xl md:text-5xl font-bold font-display mb-6 text-slate-900">How the Body Loses Vitality</h2>
-                        <p class="text-slate-600 text-lg leading-relaxed mb-6">
-                            The body declines along twelve well-described pathways, known as the hallmarks of aging. They range from damaged DNA and worn-down telomeres to exhausted stem cells and chronic inflammation, and together they drain vitality year after year.
-                        </p>
-                        <p class="text-slate-600 text-lg leading-relaxed">
-                            Evolution tuned the body for reproduction. It had little reason to keep us well for long afterward, and the body we inherited shows it. <strong class="text-orange-600">This initiative sets out to change that.</strong>
-                        </p>
+        <!-- 02 The problem -->
+        <section class="block" id="problem">
+            <div class="wrap">
+                <div class="problem-top">
+                    <div class="copy reveal">
+                        <div class="label mono"><span class="n">02</span><span class="dot"></span><span>The Problem</span></div>
+                        <h2>How the Body Loses Vitality</h2>
+                        <p>The body declines along twelve well-described pathways, known as the hallmarks of aging. They range from damaged DNA and worn-down telomeres to exhausted stem cells and chronic inflammation, and together they drain vitality year after year.</p>
+                        <p>Evolution tuned the body for reproduction. It had little reason to keep us well for long afterward, and the body we inherited shows it. <strong>This initiative sets out to change that.</strong></p>
                     </div>
-                    
-                    <!-- Visual Grid (Warning Style - Vibrancy Update) -->
-                    <div class="md:col-span-3 relative reveal delay-200">
-                        <!-- More Vibrant Background Glow -->
-                        <div class="absolute inset-0 bg-gradient-to-tr from-red-500/20 to-orange-500/20 rounded-full blur-3xl"></div>
-                        
-                        <div class="glass-card rounded-2xl p-6 relative overflow-hidden border-red-200 bg-white/60 backdrop-blur-xl shadow-2xl shadow-red-500/5">
-                            <!-- Header -->
-                            <div class="flex items-center justify-between mb-6 border-b border-red-200 pb-4">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                                    <span class="text-xs font-mono uppercase tracking-widest text-red-600 font-bold">12 Hallmarks of Aging</span>
-                                </div>
-                                <i data-lucide="alert-triangle" class="w-4 h-4 text-red-500"></i>
-                            </div>
-
-                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 auto-rows-fr">
-                                <!-- Reusable Item Style - Vibrant & Clean -->
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="dna" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Genomic Instability</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="scissors" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Telomere Attrition</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="sliders" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Epigenetic Drift</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="package-x" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Loss of Proteostasis</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="radio" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Deregulated Nutrient Sensing</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="battery-warning" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Mitochondrial Dysfunction</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="pause-circle" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Cellular Senescence</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="sprout" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Stem Cell Exhaustion</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="messages-square" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Altered Intercellular Communication</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="flame" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Chronic Inflammation</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="recycle" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Disabled Autophagy</h4>
-                                </div>
-
-                                <div class="p-3 bg-white rounded-lg border border-red-100 shadow-sm flex flex-col items-start hover:border-red-400 hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 group cursor-default">
-                                    <div class="p-1.5 bg-red-50 rounded-md mb-2 group-hover:bg-red-100 transition-colors">
-                                        <i data-lucide="bug" class="w-5 h-5 text-red-600 transition-transform"></i>
-                                    </div>
-                                    <h4 class="text-xs font-bold text-slate-800 group-hover:text-red-700 transition-colors">Dysbiosis</h4>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="hallmarks reveal">
+                        <div class="hallmarks-head mono"><span class="warn">12 Hallmarks of Aging</span><i data-lucide="triangle-alert" aria-hidden="true"></i></div>
+                        <ol class="hallmark-list">
+                            <li><span class="ic"><i data-lucide="dna"></i></span>Genomic Instability</li>
+                            <li><span class="ic"><i data-lucide="scissors"></i></span>Telomere Attrition</li>
+                            <li><span class="ic"><i data-lucide="sliders-horizontal"></i></span>Epigenetic Drift</li>
+                            <li><span class="ic"><i data-lucide="package-x"></i></span>Loss of Proteostasis</li>
+                            <li><span class="ic"><i data-lucide="radio"></i></span>Deregulated Nutrient Sensing</li>
+                            <li><span class="ic"><i data-lucide="battery-warning"></i></span>Mitochondrial Dysfunction</li>
+                            <li><span class="ic"><i data-lucide="pause-circle"></i></span>Cellular Senescence</li>
+                            <li><span class="ic"><i data-lucide="sprout"></i></span>Stem Cell Exhaustion</li>
+                            <li class="key"><span class="ic"><i data-lucide="messages-square"></i></span>Altered Intercellular Communication</li>
+                            <li><span class="ic"><i data-lucide="flame"></i></span>Chronic Inflammation</li>
+                            <li><span class="ic"><i data-lucide="recycle"></i></span>Disabled Autophagy</li>
+                            <li><span class="ic"><i data-lucide="bug"></i></span>Dysbiosis</li>
+                        </ol>
                     </div>
                 </div>
 
-                <!-- Why the method fits the problem -->
-                <div class="mt-16 grid lg:grid-cols-2 gap-8">
-                    <div class="glass-card rounded-2xl p-8 border border-slate-100 bg-white reveal">
-                        <div class="flex items-start gap-3 mb-4">
-                            <div class="p-2 bg-orange-50 rounded-lg border border-orange-100 shrink-0">
-                                <i data-lucide="network" class="w-5 h-5 text-orange-500"></i>
-                            </div>
-                            <h3 class="text-xl sm:text-2xl font-bold font-display text-slate-900 text-balance">Aging Is a Coordination Failure</h3>
-                        </div>
-                        <p class="text-slate-600 leading-relaxed">
-                            The twelve hallmarks are best read as signs of one underlying failure. A healthy body is a community of trillions of cells that stay in step with each other, each doing its part to build, maintain and repair. With age, the communication between those cells breaks down, and one of the hallmarks, altered intercellular communication, names this directly. Cells lose track of the larger plan, and the damage the hallmarks describe is what that loss of coordination looks like.
-                        </p>
-                    </div>
-
-                    <div class="glass-card rounded-2xl p-8 border border-slate-100 bg-white reveal delay-200">
-                        <div class="flex items-start gap-3 mb-4">
-                            <div class="p-2 bg-sky-50 rounded-lg border border-sky-100 shrink-0">
-                                <i data-lucide="audio-waveform" class="w-5 h-5 text-sky-500"></i>
-                            </div>
-                            <h3 class="text-xl sm:text-2xl font-bold font-display text-slate-900 text-balance">Bioelectric Signals Carry the Plan</h3>
-                        </div>
-                        <p class="text-slate-600 leading-relaxed">
-                            Much of that coordination runs on bioelectric signals, the patterns of voltage that cells use to share information. These signals carry the body's plan: what shape to hold, where each tissue belongs and when to repair. Light, sound, temperature, breath and gentle currents can all influence this signaling. Their effect on a problem like telomere attrition is indirect: they help restore the conversation between cells, and cells that are working together again are better able to maintain and repair themselves.
-                        </p>
+                <div class="coord">
+                    <div class="widget reveal" data-widget="coordination" role="img" aria-label="Cells keeping time together, then losing coordination, then brought back into step by bioelectric signals"></div>
+                    <div class="coord-cols">
+                        <article class="reveal">
+                            <span class="sub mono am">Why the body declines</span>
+                            <h3 class="mid">Aging Is a Coordination Failure</h3>
+                            <p>The twelve hallmarks are best read as signs of one underlying failure. A healthy body is a community of trillions of cells that stay in step with each other, each doing its part to build, maintain and repair. With age, the communication between those cells breaks down, and one of the hallmarks, altered intercellular communication, names this directly. Cells lose track of the larger plan, and the damage the hallmarks describe is what that loss of coordination looks like.</p>
+                        </article>
+                        <article class="reveal">
+                            <span class="sub mono cy">Why the method fits</span>
+                            <h3 class="mid">Bioelectric Signals Carry the Plan</h3>
+                            <p>Much of that coordination runs on bioelectric signals, the patterns of voltage that cells use to share information. These signals carry the body's plan: what shape to hold, where each tissue belongs and when to repair. Light, sound, temperature, breath and gentle currents can all influence this signaling. Their effect on a problem like telomere attrition is indirect: they help restore the conversation between cells, and cells that are working together again are better able to maintain and repair themselves.</p>
+                        </article>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- The Solution: Interactive Learning AGI -->
-        <section id="solution" class="py-24 bg-slate-50 relative">
-            <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-orange-300 to-transparent opacity-50"></div>
-            
-            <div class="max-w-7xl mx-auto px-6 text-center mb-16 reveal">
-                <span class="text-orange-500 font-mono text-sm tracking-widest uppercase mb-2 block font-bold">The Key</span>
-                <h2 class="text-4xl md:text-5xl font-bold font-display mb-6 text-slate-900">Interactive Learning AGI</h2>
-                <p class="text-slate-600 text-lg max-w-3xl mx-auto">
-                    What makes this possible is an artificial general intelligence that works with the body in a closed loop. It reads the body's state, works out what is driving it, chooses a response, acts, checks the result and learns from it, again and again.
-                </p>
-            </div>
+        <!-- 03 The key -->
+        <section class="block tint" id="solution">
+            <div class="wrap">
+                <div class="head-grid reveal">
+                    <div>
+                        <div class="label mono"><span class="n">03</span><span class="dot"></span><span>The Key</span></div>
+                        <h2>Interactive Learning AGI</h2>
+                    </div>
+                    <p class="intro">What makes this possible is an artificial general intelligence that works with the body in a closed loop. It reads the body's state, works out what is driving it, chooses a response, acts, checks the result and learns from it, again and again.</p>
+                </div>
 
-            <!-- The Loop Visualization -->
-            <div class="max-w-6xl mx-auto px-6 mb-24 relative">
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-16 relative z-10 pl-12 lg:pl-0">
-                    
-                    <!-- Mobile Feedback Loop Line (Left Side) -->
-                    <!-- Connects bottom (Learn) back to top (Sense) -->
-                    <div class="absolute top-8 bottom-8 left-4 w-1.5 rounded-full bg-gradient-to-t from-blue-400 via-indigo-400 to-red-400 lg:hidden opacity-70"></div>
-                    
-                    <!-- Animated Particle on the loop line -->
-                     <div class="absolute left-[13px] w-2.5 h-2.5 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.8)] lg:hidden animate-particle-up"></div>
+                <div class="loop">
+                    <div class="widget reveal" data-widget="loop" role="img" aria-label="The closed loop: Sense, Understand, Plan, Act, Verify, Learn"></div>
+                    <ol class="steps reveal" id="loop-steps">
+                        <li data-step="1"><span class="num">01</span><h3>Sense</h3><p>Reads heart rate variability, temperature, sleep, breathing and metabolic markers continuously.</p></li>
+                        <li data-step="2"><span class="num">02</span><h3>Understand</h3><p>Updates its picture of what is driving your current state.</p></li>
+                        <li data-step="3"><span class="num">03</span><h3>Plan</h3><p>Chooses the gentlest response expected to help, inside fixed safety limits.</p></li>
+                        <li data-step="4"><span class="num">04</span><h3>Act</h3><p>Responds through light, sound, temperature, breath and gentle currents.</p></li>
+                        <li data-step="5"><span class="num">05</span><h3>Verify</h3><p>Measures how the body actually responded.</p></li>
+                        <li data-step="6"><span class="num">06</span><h3>Learn</h3><p>Adds the result to its Vital World Model, so the next response fits you better.</p></li>
+                    </ol>
+                </div>
 
-                    <!-- Step 1: Sense (Red/Pink) -->
-                    <div class="group relative reveal delay-100 lg:order-1">
-                        <div class="glass-card p-6 rounded-xl border-t-4 border-red-400 hover:border-red-500 transition-all h-full flex flex-col items-center text-center relative bg-white">
-                             
-                             <!-- Mobile Input Connector (From Loop) -->
-                             <div class="absolute top-8 -left-12 w-12 h-0.5 bg-gradient-to-r from-red-400 to-transparent lg:hidden"></div>
-                             <div class="absolute top-6 -left-4 bg-white border border-red-200 p-1 rounded-full lg:hidden z-10 shadow-sm">
-                                <i data-lucide="arrow-right" class="w-3 h-3 text-red-500"></i>
-                             </div>
-
-                            <div class="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4 text-red-500 border border-red-100 group-hover:scale-110 transition-transform shadow-sm">
-                                <i data-lucide="activity" class="w-8 h-8"></i>
-                            </div>
-                            <h3 class="text-xl font-bold mb-2 text-slate-900">Sense</h3>
-                            <p class="text-sm text-slate-500">Reads heart rate variability, temperature, sleep, breathing and metabolic markers continuously.</p>
-                            
-                            <!-- Mobile Down Arrow -->
-                            <div class="lg:hidden mt-4 text-red-400"><i data-lucide="arrow-down" class="w-6 h-6"></i></div>
-                            
-                            <!-- Desktop Arrow (Red) -->
-                            <div class="hidden lg:flex absolute -right-12 top-1/2 -translate-y-1/2 text-red-400 justify-center items-center w-8">
-                                <i data-lucide="arrow-right" class="w-8 h-8"></i>
-                            </div>
+                <div class="wm">
+                    <div class="wm-main reveal">
+                        <span class="sub mono">What It Learns</span>
+                        <h3 class="big">A Vital World Model</h3>
+                        <p class="first">As it goes around the loop, the intelligence learns a Vital World Model: a model of a person's whole body that predicts how they will respond to each intervention.</p>
+                        <p>The model is learned from many kinds of body data gathered over time, such as heart rhythm, temperature, sleep, breathing and metabolic signals. It learns how the whole body behaves directly from those measurements, without having to be built up piece by piece from molecules and cells.</p>
+                        <div class="models">
+                            <div class="model"><span class="mono">Shared</span><h4>A Shared Model</h4><p>The shared model improves with each person who opts in, so what is learned from one body can help others.</p></div>
+                            <div class="model"><span class="mono">Personal</span><h4>A Model of Your Own</h4><p>Each person also has a model of their own body, tuned to how they respond.</p></div>
                         </div>
                     </div>
-
-                    <!-- Step 2: Understand (Orange) -->
-                    <div class="group relative reveal delay-200 lg:order-2">
-                        <div class="glass-card p-6 rounded-xl border-t-4 border-orange-400 hover:border-orange-500 transition-all h-full flex flex-col items-center text-center relative bg-white">
-                            <!-- Removed cluttered vertical connector -->
-                            <div class="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mb-4 text-orange-500 border border-orange-100 group-hover:scale-110 transition-transform shadow-sm">
-                                <i data-lucide="brain" class="w-8 h-8"></i>
-                            </div>
-                            <h3 class="text-xl font-bold mb-2 text-slate-900">Understand</h3>
-                            <p class="text-sm text-slate-500">Updates its picture of what is driving your current state.</p>
-                            
-                            <!-- Mobile Down Arrow -->
-                            <div class="lg:hidden mt-4 text-orange-400"><i data-lucide="arrow-down" class="w-6 h-6"></i></div>
-                            
-                            <!-- Desktop Arrow (Orange) -->
-                            <div class="hidden lg:flex absolute -right-12 top-1/2 -translate-y-1/2 text-orange-400 justify-center items-center w-8">
-                                <i data-lucide="arrow-right" class="w-8 h-8"></i>
-                            </div>
-                        </div>
+                    <div class="wm-side reveal">
+                        <div class="widget" data-widget="world-model" role="img" aria-label="Personal models of the people who opt in feed one shared model, which sends what it learns back to each personal model"></div>
                     </div>
+                </div>
 
-                    <!-- Step 3: Plan (Amber) -->
-                    <div class="group relative reveal delay-300 lg:order-3">
-                        <div class="glass-card p-6 rounded-xl border-t-4 border-amber-400 hover:border-amber-500 transition-all h-full flex flex-col items-center text-center relative bg-white">
-                            <div class="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center mb-4 text-amber-500 border border-amber-100 group-hover:scale-110 transition-transform shadow-sm">
-                                <i data-lucide="route" class="w-8 h-8"></i>
-                            </div>
-                            <h3 class="text-xl font-bold mb-2 text-slate-900">Plan</h3>
-                            <p class="text-sm text-slate-500">Chooses the gentlest response expected to help, inside fixed safety limits.</p>
-                            
-                            <!-- Mobile Down Arrow -->
-                            <div class="lg:hidden mt-4 text-amber-400"><i data-lucide="arrow-down" class="w-6 h-6"></i></div>
-                            
-                            <!-- Desktop Arrow (Amber) -->
-                            <div class="hidden lg:flex absolute left-1/2 -bottom-12 -translate-x-1/2 text-amber-400 justify-center items-center h-8">
-                                <i data-lucide="arrow-down" class="w-8 h-8"></i>
-                            </div>
-                        </div>
+                <div class="safety reveal">
+                    <div>
+                        <span class="sub mono">Safety</span>
+                        <h3 class="big">How It Stays Safe</h3>
+                        <ol class="rules">
+                            <li><span class="num">01</span><span>It acts only for the benefit of the person it is working with, and it learns from the results.</span></li>
+                            <li><span class="num">02</span><span>It never experiments on anyone just to learn something.</span></li>
+                            <li><span class="num">03</span><span>Every action stays inside fixed limits that the intelligence cannot change.</span></li>
+                            <li><span class="num">04</span><span>The less sure it is about a response, the less it does.</span></li>
+                        </ol>
                     </div>
-
-                    <!-- Step 4: Act (Sky) -->
-                    <div class="group relative reveal delay-400 lg:order-6">
-                        <div class="glass-card p-6 rounded-xl border-t-4 border-sky-400 hover:border-sky-500 transition-all h-full flex flex-col items-center text-center relative bg-white">
-                            <div class="w-16 h-16 rounded-full bg-sky-50 flex items-center justify-center mb-4 text-sky-500 border border-sky-100 group-hover:scale-110 transition-transform shadow-sm">
-                                <i data-lucide="zap" class="w-8 h-8"></i>
-                            </div>
-                            <h3 class="text-xl font-bold mb-2 text-slate-900">Act</h3>
-                            <p class="text-sm text-slate-500">Responds through light, sound, temperature, breath and gentle currents.</p>
-                            
-                            <!-- Mobile Down Arrow -->
-                            <div class="lg:hidden mt-4 text-sky-400"><i data-lucide="arrow-down" class="w-6 h-6"></i></div>
-                            
-                            <!-- Desktop Arrow (Sky) -->
-                            <div class="hidden lg:flex absolute -left-12 top-1/2 -translate-y-1/2 text-sky-400 justify-center items-center w-8">
-                                <i data-lucide="arrow-left" class="w-8 h-8"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 5: Verify (Indigo) -->
-                    <div class="group relative reveal delay-500 lg:order-5">
-                        <div class="glass-card p-6 rounded-xl border-t-4 border-indigo-400 hover:border-indigo-500 transition-all h-full flex flex-col items-center text-center relative bg-white">
-                            <div class="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center mb-4 text-indigo-500 border border-indigo-100 group-hover:scale-110 transition-transform shadow-sm">
-                                <i data-lucide="clipboard-check" class="w-8 h-8"></i>
-                            </div>
-                            <h3 class="text-xl font-bold mb-2 text-slate-900">Verify</h3>
-                            <p class="text-sm text-slate-500">Measures how the body actually responded.</p>
-                            
-                            <!-- Mobile Down Arrow -->
-                            <div class="lg:hidden mt-4 text-indigo-400"><i data-lucide="arrow-down" class="w-6 h-6"></i></div>
-                            
-                            <!-- Desktop Arrow (Indigo) -->
-                            <div class="hidden lg:flex absolute -left-12 top-1/2 -translate-y-1/2 text-indigo-400 justify-center items-center w-8">
-                                <i data-lucide="arrow-left" class="w-8 h-8"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 6: Learn (Blue) -->
-                    <div class="group relative reveal delay-600 lg:order-4">
-                        <div class="glass-card p-6 rounded-xl border-t-4 border-blue-400 hover:border-blue-500 transition-all h-full flex flex-col items-center text-center relative bg-white">
-                             
-                             <!-- Mobile Output Connector (To Loop) -->
-                             <div class="absolute bottom-8 -left-12 w-12 h-0.5 bg-gradient-to-r from-blue-400 to-transparent lg:hidden"></div>
-                             <div class="absolute bottom-6 -left-4 bg-white border border-blue-200 p-1 rounded-full lg:hidden z-10 shadow-sm">
-                                <i data-lucide="arrow-left" class="w-3 h-3 text-blue-500"></i>
-                             </div>
-
-                            <div class="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4 text-blue-500 border border-blue-100 group-hover:scale-110 transition-transform shadow-sm">
-                                <i data-lucide="lightbulb" class="w-8 h-8"></i>
-                            </div>
-                            <h3 class="text-xl font-bold mb-2 text-slate-900">Learn</h3>
-                            <p class="text-sm text-slate-500">Adds the result to its Vital World Model, so the next response fits you better.</p>
-                             
-                             <!-- Loop Complete Label -->
-                             <div class="lg:hidden mt-4 text-blue-300 flex flex-col items-center relative">
-                                 <span class="text-[10px] uppercase tracking-widest text-slate-400">Loop Completes</span>
-                             </div>
-
-                             <!-- Desktop Arrow (Blue) -->
-                             <div class="hidden lg:flex absolute left-1/2 -top-12 -translate-x-1/2 text-blue-400 justify-center items-center h-8">
-                                <i data-lucide="arrow-up" class="w-8 h-8"></i>
-                            </div>
-                        </div>
-                    </div>
-
+                    <div class="widget" data-widget="safety" role="img" aria-label="As certainty falls, the size of any action falls with it, always inside a fixed limit"></div>
                 </div>
             </div>
+        </section>
 
-            <!-- What the loop learns, and how it stays safe -->
-            <div class="max-w-6xl mx-auto px-6 grid lg:grid-cols-5 gap-8">
-                <div class="lg:col-span-3 glass-card rounded-2xl p-8 md:p-10 border border-orange-100 bg-white reveal">
-                    <span class="text-orange-500 font-mono text-xs tracking-widest uppercase mb-2 block font-bold">What It Learns</span>
-                    <h3 class="text-3xl font-bold font-display text-slate-900 mb-4">A Vital World Model</h3>
-                    <p class="text-slate-600 leading-relaxed mb-4">
-                        As it goes around the loop, the intelligence learns a Vital World Model: a model of a person's whole body that predicts how they will respond to each intervention.
-                    </p>
-                    <p class="text-slate-600 leading-relaxed mb-6">
-                        The model is learned from many kinds of body data gathered over time, such as heart rhythm, temperature, sleep, breathing and metabolic signals. It learns how the whole body behaves directly from those measurements, without having to be built up piece by piece from molecules and cells.
-                    </p>
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div class="p-4 bg-orange-50/60 rounded-xl border border-orange-100">
-                            <h4 class="font-bold text-slate-900 mb-1 flex items-center"><i data-lucide="users" class="w-4 h-4 text-orange-500 mr-2"></i>A Shared Model</h4>
-                            <p class="text-sm text-slate-600">The shared model improves with each person who opts in, so what is learned from one body can help others.</p>
+        <!-- 04 The paradigm shift -->
+        <section class="block" id="paradigm">
+            <div class="wrap">
+                <div class="head-grid reveal">
+                    <div>
+                        <div class="label mono"><span class="n">04</span><span class="dot"></span><span>Paradigm</span></div>
+                        <h2>The Paradigm Shift</h2>
+                    </div>
+                    <p class="intro">Traditional medicine treats the body as a machine to be repaired when it breaks. In this paradigm the body is a living intelligence that can take part in its own care, and medicine works alongside it every day.</p>
+                </div>
+
+                <div class="compare reveal">
+                    <div class="old">
+                        <span class="mono"><span class="ic"><i data-lucide="x"></i></span>Before</span>
+                        <h3>Engineering</h3>
+                        <p>Care comes in occasional visits, starts after something breaks, relies on population averages and repairs the body from the outside.</p>
+                    </div>
+                    <div class="new">
+                        <span class="mono"><span class="ic"><i data-lucide="check"></i></span>Now</span>
+                        <h3>Conversation</h3>
+                        <p>Care runs all the time, starts before problems appear, follows each person's own biology and helps the body repair itself.</p>
+                    </div>
+                </div>
+
+                <div class="conversation reveal">
+                    <div class="widget" data-widget="conversation" role="img" aria-label="Signals passing both ways between the body and the intelligence"></div>
+                </div>
+
+                <div class="medicine">
+                    <div class="text reveal">
+                        <h3 class="big">The Medicine of Conversation</h3>
+                        <p>In practice, the intelligence stays in constant two-way contact with the body. It sends signals through light, sound, temperature, breath and gentle bioelectric currents. The body responds, and the intelligence measures that response and updates its understanding before acting again.</p>
+                        <p>This is medicine as an ongoing conversation with the body, carried on at the level of cell signaling. It runs day and night, and it follows each person's own biology as that biology changes.</p>
+                    </div>
+                    <div class="reveal">
+                        <div class="aside-card">
+                            <span class="mono"><i data-lucide="target" aria-hidden="true"></i>Physiological Targets</span>
+                            <ul class="chips">
+                                <li>Parasympathetic Recovery</li>
+                                <li>Lymphatic Flow</li>
+                                <li>Circadian Coherence</li>
+                            </ul>
                         </div>
-                        <div class="p-4 bg-sky-50/60 rounded-xl border border-sky-100">
-                            <h4 class="font-bold text-slate-900 mb-1 flex items-center"><i data-lucide="user" class="w-4 h-4 text-sky-500 mr-2"></i>A Model of Your Own</h4>
-                            <p class="text-sm text-slate-600">Each person also has a model of their own body, tuned to how they respond.</p>
+                        <div class="aside-card principle">
+                            <span class="mono"><i data-lucide="shield-check" aria-hidden="true"></i>Principle</span>
+                            <h4>Transparency and Ownership</h4>
+                            <p>People should be able to see what was measured, what was done and why, in plain language. Their data and their personal model belong to them.</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="lg:col-span-2 glass-card rounded-2xl p-8 md:p-10 border border-sky-100 bg-white reveal delay-200">
-                    <span class="text-sky-600 font-mono text-xs tracking-widest uppercase mb-2 block font-bold">Safety</span>
-                    <h3 class="text-3xl font-bold font-display text-slate-900 mb-6">How It Stays Safe</h3>
-                    <ul class="space-y-5">
-                        <li class="flex items-start">
-                            <i data-lucide="heart-handshake" class="w-5 h-5 text-sky-500 mr-3 mt-0.5 shrink-0"></i>
-                            <span class="text-slate-600 leading-relaxed">It acts only for the benefit of the person it is working with, and it learns from the results.</span>
-                        </li>
-                        <li class="flex items-start">
-                            <i data-lucide="ban" class="w-5 h-5 text-sky-500 mr-3 mt-0.5 shrink-0"></i>
-                            <span class="text-slate-600 leading-relaxed">It never experiments on anyone just to learn something.</span>
-                        </li>
-                        <li class="flex items-start">
-                            <i data-lucide="shield-check" class="w-5 h-5 text-sky-500 mr-3 mt-0.5 shrink-0"></i>
-                            <span class="text-slate-600 leading-relaxed">Every action stays inside fixed limits that the intelligence cannot change.</span>
-                        </li>
-                        <li class="flex items-start">
-                            <i data-lucide="gauge" class="w-5 h-5 text-sky-500 mr-3 mt-0.5 shrink-0"></i>
-                            <span class="text-slate-600 leading-relaxed">The less sure it is about a response, the less it does.</span>
-                        </li>
+                <div class="freedom reveal">
+                    <div class="freedom-head">
+                        <h3 class="big">Biological Freedom</h3>
+                        <p class="intro">Over time, this conversation leads to biological freedom. You can set your own goals for your body and have a safe way to reach them.</p>
+                    </div>
+                    <ul class="aims">
+                        <li><span class="ic" style="--c:var(--indigo)"><i data-lucide="moon"></i></span>Deeper Sleep</li>
+                        <li><span class="ic" style="--c:var(--amber)"><i data-lucide="zap"></i></span>Cognitive Clarity</li>
+                        <li><span class="ic" style="--c:var(--red)"><i data-lucide="activity"></i></span>Faster Recovery</li>
+                        <li><span class="ic" style="--c:var(--sky)"><i data-lucide="smile"></i></span>Stable Mood</li>
+                        <li><span class="ic" style="--c:var(--green)"><i data-lucide="infinity"></i></span>Healthy Lifespan</li>
+                        <li><span class="ic" style="--c:var(--purple)"><i data-lucide="dumbbell"></i></span>Physical Resilience</li>
                     </ul>
                 </div>
             </div>
         </section>
 
-        <!-- Paradigm Shift -->
-        <div id="paradigm" class="max-w-7xl mx-auto px-6 py-24 bg-white">
-            <div class="glass-card rounded-2xl p-8 md:p-12 border border-slate-100 reveal mb-8 bg-slate-50">
-                <div class="grid md:grid-cols-2 gap-12 items-center">
-                    <div class="space-y-6">
-                        <h3 class="text-3xl font-bold font-display text-slate-900">The Paradigm Shift</h3>
-                        <p class="text-slate-600">
-                            Traditional medicine treats the body as a machine to be repaired when it breaks. In this paradigm the body is a living intelligence that can take part in its own care, and medicine works alongside it every day.
-                        </p>
-                        <div class="space-y-4">
-                            <div class="flex items-start">
-                                <i data-lucide="x" class="w-6 h-6 text-red-500 mr-3 mt-1"></i>
-                                <div>
-                                    <h4 class="font-bold text-slate-700">Engineering</h4>
-                                    <p class="text-sm text-slate-500">Care comes in occasional visits, starts after something breaks, relies on population averages and repairs the body from the outside.</p>
-                                </div>
-                            </div>
-                            <div class="flex items-start">
-                                <i data-lucide="check" class="w-6 h-6 text-green-500 mr-3 mt-1"></i>
-                                <div>
-                                    <h4 class="font-bold text-slate-900">Conversation</h4>
-                                    <p class="text-sm text-slate-600">Care runs all the time, starts before problems appear, follows each person's own biology and helps the body repair itself.</p>
-                                </div>
-                            </div>
-                        </div>
+        <!-- 05 The path -->
+        <section class="block tint" id="vision">
+            <div class="wrap">
+                <div class="head-grid reveal">
+                    <div>
+                        <div class="label mono"><span class="n">05</span><span class="dot"></span><span>How the Paradigm Unfolds</span></div>
+                        <h2>The Path</h2>
                     </div>
-                    
-                    <!-- NEW GRAPHIC: Conversation/Living Intelligence vs Machine (Light Theme) -->
-                    <div class="relative flex flex-col items-center justify-center h-full min-h-[400px] border border-slate-200 rounded-2xl bg-white overflow-hidden group shadow-xl transition-all duration-500 hover:shadow-2xl">
-                        
-                        <!-- Background Effects (Light & Organic) -->
-                        <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-orange-100/40 via-white to-white opacity-80"></div>
-                        <div class="absolute inset-0" style="background-image: radial-gradient(rgba(14, 165, 233, 0.1) 1px, transparent 1px); background-size: 24px 24px;"></div>
-                        
-                        <!-- Central Animation Container -->
-                        <div class="relative w-full h-full flex items-center justify-center p-8">
-                            
-                            <!-- Connecting Infinity Loop (SVG) -->
-                            <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
-                                <defs>
-                                    <linearGradient id="lightFlowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" style="stop-color:#f97316" /> <!-- Orange -->
-                                        <stop offset="50%" style="stop-color:#f59e0b" /> <!-- Amber -->
-                                        <stop offset="100%" style="stop-color:#0ea5e9" /> <!-- Sky -->
-                                    </linearGradient>
-                                    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
-                                        <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                                        <feMerge>
-                                            <feMergeNode in="coloredBlur"/>
-                                            <feMergeNode in="SourceGraphic"/>
-                                        </feMerge>
-                                    </filter>
-                                </defs>
-                                
-                                <!-- Background Path (Subtle Slate) -->
-                                <path d="M 80 200 C 80 100, 320 100, 320 200 C 320 300, 80 300, 80 200" 
-                                      fill="none" stroke="#e2e8f0" stroke-width="1" />
+                    <p class="intro">In its full form, the paradigm reaches every place where people live, work, heal and rest. Homes, wearables, clinics, hospitals and wellness centers can all be connected by the same learning loop.</p>
+                </div>
 
-                                <!-- Active Flow Path (Gradient) -->
-                                <path d="M 80 200 C 80 100, 320 100, 320 200 C 320 300, 80 300, 80 200" 
-                                      fill="none" stroke="url(#lightFlowGrad)" stroke-width="3" stroke-linecap="round" filter="url(#softGlow)" class="opacity-80" />
+                <div class="path">
+                    <div class="widget reveal" data-widget="path" role="img" aria-label="The home at the center, bedroom and bathroom around it, then wearables, clinics and hospitals"></div>
+                    <ol class="stages reveal">
+                        <li>
+                            <span class="mono">First</span>
+                            <h3>Beginning at Home</h3>
+                            <p>The home is the natural starting point. People spend most of their time there, the body does much of its repair during sleep, and continuous contact with the body is easy to keep up. It is also where health gets the least support today.</p>
+                        </li>
+                        <li>
+                            <span class="mono">Within the home</span>
+                            <h3>Two Rooms First</h3>
+                            <p>Within the home, two spaces matter most. The bathroom is rich in metabolic signals that can be read without any effort from the person. The bedroom is where sleep happens, and sleep is the body's deepest repair process. Sensors for these rooms can be built from scratch or added to fixtures people already have.</p>
+                        </li>
+                        <li>
+                            <span class="mono">Beyond the home</span>
+                            <h3>Reaching Outward</h3>
+                            <p>From the home, the same loop can extend to wearables that travel with a person, to clinics and hospitals that gain a continuous picture of each patient, and to wellness settings built for renewal. The path covers all of these because vitality does not stop at the edge of any one setting. Home comes first because that is where the loop can do the most good with the least disruption to daily life.</p>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </section>
 
-                                <!-- Moving Particles (White with Colored Shadow) -->
-                                <circle r="4" fill="#f97316" filter="url(#softGlow)">
-                                    <animateMotion repeatCount="indefinite" dur="6s" path="M 80 200 C 80 100, 320 100, 320 200 C 320 300, 80 300, 80 200" />
-                                </circle>
-                                <circle r="4" fill="#0ea5e9" filter="url(#softGlow)">
-                                    <animateMotion repeatCount="indefinite" dur="6s" begin="3s" path="M 80 200 C 80 100, 320 100, 320 200 C 320 300, 80 300, 80 200" />
-                                </circle>
-                            </svg>
+        <!-- 06 The imperative -->
+        <section class="block" id="imperative">
+            <div class="wrap">
+                <div class="reveal">
+                    <div class="label mono"><span class="n">06</span><span class="dot"></span><span>The Economics</span></div>
+                    <h2>The Civilizational Imperative</h2>
+                </div>
+                <div class="imperative">
+                    <div class="text reveal">
+                        <p class="lead">Getting this right would change how a whole civilization cares for its health.</p>
+                        <p>Healthcare today is reactive and expensive, and it cannot keep growing the way it has. It waits for something to break, steps in at great cost, and manages decline instead of preventing it. Most of the money goes to the last years of life, after health has already failed, and very little goes to keeping people well along the way.</p>
+                        <p><strong>The paradigm turns this around.</strong> If preventing decline costs less than managing it, the approach pays for itself. Money no longer spent on chronic disease, hospital stays and long-term prescriptions can go back into keeping people healthy.</p>
+                    </div>
+                    <aside class="dividend reveal">
+                        <span class="mono">A Health Dividend</span>
+                        <h3>&ldquo;Better Than Free&rdquo;</h3>
+                        <p>The money saved when disease is avoided should go back to the people whose health produced the savings, as a health dividend. Then vitality is something everyone can afford, and taking part costs less than nothing.</p>
+                        <div class="outcome"><span class="ic"><i data-lucide="scale"></i></span><div><span class="mono">Outcome</span><b>Vitality as a Right</b></div></div>
+                        <p class="note">This becomes possible once keeping people well costs less than treating them when they are sick.</p>
+                    </aside>
+                </div>
+            </div>
+        </section>
 
-                            <!-- Left Node: Living Intelligence -->
-                            <div class="absolute left-[10%] sm:left-[15%] flex flex-col items-center gap-4 z-10">
-                                <div class="relative w-24 h-24 group-hover:scale-105 transition-transform duration-500">
-                                    <div class="absolute inset-0 bg-orange-100 rounded-full blur-md animate-pulse"></div>
-                                    <div class="relative w-full h-full bg-white rounded-full border-2 border-orange-100 flex items-center justify-center shadow-lg">
-                                        <div class="p-3 bg-orange-50 rounded-full">
-                                            <i data-lucide="user" class="w-8 h-8 text-orange-500"></i>
-                                        </div>
-                                    </div>
-                                    <!-- Organic Ring -->
-                                    <div class="absolute inset-[-4px] rounded-full border-t-2 border-l-2 border-orange-200 animate-spin-slow"></div>
-                                </div>
-                                <div class="bg-white/90 backdrop-blur-md border border-orange-100 px-4 py-2 rounded-xl text-center shadow-sm">
-                                    <span class="text-[10px] font-bold uppercase tracking-widest text-orange-600 block leading-tight">Living</span>
-                                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 block leading-tight">Intelligence</span>
-                                </div>
-                            </div>
-
-                            <!-- Right Node: Interactive Learning AGI -->
-                            <div class="absolute right-[10%] sm:right-[15%] flex flex-col items-center gap-4 z-10">
-                                <div class="relative w-24 h-24 group-hover:scale-105 transition-transform duration-500">
-                                    <div class="absolute inset-0 bg-sky-100 rounded-full blur-md animate-pulse" style="animation-delay: 1s;"></div>
-                                    <div class="relative w-full h-full bg-white rounded-full border-2 border-sky-100 flex items-center justify-center shadow-lg">
-                                        <div class="p-3 bg-sky-50 rounded-full">
-                                            <i data-lucide="brain-circuit" class="w-8 h-8 text-sky-500"></i>
-                                        </div>
-                                    </div>
-                                    <!-- Organic Ring Reverse -->
-                                    <div class="absolute inset-[-4px] rounded-full border-b-2 border-r-2 border-sky-200 animate-spin-reverse-slow"></div>
-                                </div>
-                                <div class="bg-white/90 backdrop-blur-md border border-sky-100 px-4 py-2 rounded-xl text-center shadow-sm">
-                                    <span class="text-[10px] font-bold uppercase tracking-widest text-sky-600 block leading-tight">Interactive</span>
-                                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 block leading-tight">AGI</span>
-                                </div>
-                            </div>
-                            
-                            <!-- Central Convergence Point -->
-                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 flex items-center justify-center">
-                                 <div class="absolute w-2 h-2 bg-gradient-to-r from-orange-400 to-sky-400 rounded-full shadow-lg animate-pulse"></div>
-                                 <div class="absolute w-full h-full border border-orange-100/50 rounded-full animate-ping opacity-30"></div>
-                                 <div class="absolute w-2/3 h-2/3 border border-sky-100/50 rounded-full animate-ping opacity-30" style="animation-delay: 0.5s"></div>
-                            </div>
-
-                        </div>
-                        
-                        <div class="absolute bottom-6 text-center w-full px-6">
-                            <p class="text-slate-400 text-[10px] font-mono tracking-[0.2em] uppercase">A Continuous Two-Way Conversation</p>
-                        </div>
+        <!-- 07 FAQ -->
+        <section class="block tint" id="faq">
+            <div class="wrap">
+                <div class="reveal">
+                    <div class="label mono"><span class="n">07</span><span class="dot"></span><span>FAQ</span></div>
+                    <h2>Addressing the Hard Questions</h2>
+                </div>
+                <div class="faq">
+                    <div class="faq-item reveal">
+                        <h3><span class="mono">Safety</span>&ldquo;Is it safe?&rdquo;</h3>
+                        <p>It is built around four rules. It acts only for the benefit of the person it is working with, and it learns from the results of those actions. It never tries something on a person just to see what happens. Every action stays inside fixed limits that the intelligence cannot change, and the less sure it is about a response, the less it does.</p>
+                    </div>
+                    <div class="faq-item reveal">
+                        <h3><span class="mono">Population</span>&ldquo;Won't this cause overpopulation?&rdquo;</h3>
+                        <p>Longer lives make the population grow slowly and steadily, without the runaway growth people tend to imagine. The bigger question is whether we live sustainably, at any lifespan. And the gain is large. Scientists would get to finish their work, artists would reach mastery, and people would keep sharing what they have learned for far longer.</p>
+                    </div>
+                    <div class="faq-item reveal">
+                        <h3><span class="mono">Meaning</span>&ldquo;Death gives life meaning.&rdquo;</h3>
+                        <p>That belief has helped people accept a decline that, until now, no one could avoid. Meaning can also come from what people create and choose to do, and from having enough time to go deeply into it. Experience can be precious without the threat of its ending.</p>
+                    </div>
+                    <div class="faq-item reveal">
+                        <h3><span class="mono">Access</span>&ldquo;Is this only for the rich?&rdquo;</h3>
+                        <p>It should not be. When avoiding disease costs less than managing it, the savings can be returned to people as a health dividend. Vitality then becomes an investment that pays people back, and everyone can take part.</p>
+                    </div>
+                    <div class="faq-item reveal">
+                        <h3><span class="mono">Choice</span>&ldquo;Are you trying to make people immortal?&rdquo;</h3>
+                        <p>The goal is to give people a choice about how their lives continue. We imagine that a person could one day make a voluntary transition to new forms of existence and consciousness, which we call graduation, at a time of their own choosing. Today that change is forced on people when their bodies fail.</p>
                     </div>
                 </div>
             </div>
+        </section>
 
-            <!-- The Medicine of Conversation -->
-            <div class="grid md:grid-cols-12 gap-8 mb-8">
-                <div class="md:col-span-7 glass-card rounded-2xl p-8 border border-slate-100 reveal delay-100 bg-white">
-                    <h3 class="text-2xl font-bold font-display text-slate-900 mb-6">The Medicine of Conversation</h3>
-                    <div class="space-y-4 text-slate-600 leading-relaxed">
-                        <p>
-                            In practice, the intelligence stays in constant two-way contact with the body. It sends signals through light, sound, temperature, breath and gentle bioelectric currents. The body responds, and the intelligence measures that response and updates its understanding before acting again.
-                        </p>
-                        <p>
-                            This is medicine as an ongoing conversation with the body, carried on at the level of cell signaling. It runs day and night, and it follows each person's own biology as that biology changes.
-                        </p>
-                    </div>
-                </div>
-                <div class="md:col-span-5 space-y-4 reveal delay-200">
-                    <div class="glass-card rounded-2xl p-8 border border-slate-100 h-full flex flex-col justify-center bg-white">
-                        <h4 class="text-slate-900 font-bold mb-4 flex items-center"><i data-lucide="target" class="w-5 h-5 text-orange-500 mr-2"></i> Physiological Targets</h4>
-                        <div class="flex flex-wrap gap-2 mb-6">
-                            <span class="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-700 text-xs rounded-full font-medium">Parasympathetic Recovery</span>
-                            <span class="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-700 text-xs rounded-full font-medium">Lymphatic Flow</span>
-                            <span class="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-700 text-xs rounded-full font-medium">Circadian Coherence</span>
-                        </div>
-                        <div class="border-t border-slate-100 pt-4">
-                            <h4 class="text-slate-900 font-bold mb-2 text-sm flex items-center"><i data-lucide="shield-check" class="w-4 h-4 text-sky-500 mr-2"></i> Transparency and Ownership</h4>
-                            <p class="text-xs text-slate-500">
-                                People should be able to see what was measured, what was done and why, in plain language. Their data and their personal model belong to them.
-                            </p>
-                        </div>
-                    </div>
-                </div>
+        <!-- 08 Invitation -->
+        <section class="invite" id="contact">
+            <canvas data-widget="hero-field" data-mode="calm" aria-hidden="true"></canvas>
+            <div class="wrap reveal">
+                <div class="label mono"><span class="n">08</span><span class="dot"></span><span>Get in Touch</span></div>
+                <h2>An Invitation</h2>
+                <p class="intro">This paradigm is larger than any one organization. It could be carried forward by companies, by university research labs, by non-profits or by government-funded research, and most likely by several of them working together.</p>
+                <p class="intro">If you want to help develop it, as a person or as an organization, in any of those forms or in one we have not thought of, we would like to hear from you.</p>
+                <p class="call">Write to us and tell us how you would like to help.</p>
+                <a class="email" href="mailto:jad@superfoundry.dev">jad@superfoundry.dev</a>
+                <small class="copyright">10X Vital Intelligence © 2026</small>
             </div>
+        </section>
+    </main>
 
-            <!-- Biological Freedom -->
-            <div class="glass-card rounded-2xl p-8 md:p-12 border border-slate-100 text-center reveal bg-gradient-to-br from-slate-50 to-orange-50/30">
-                <div class="max-w-3xl mx-auto">
-                    <h3 class="text-3xl font-bold font-display text-slate-900 mb-4">Biological Freedom</h3>
-                    <p class="text-lg text-slate-600 mb-8">
-                        Over time, this conversation leads to biological freedom. You can set your own goals for your body and have a safe way to reach them.
-                    </p>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-left">
-                        
-                        <!-- Deeper Sleep -->
-                        <div class="group p-4 bg-white rounded-xl border border-slate-100 hover:border-indigo-300 transition-all duration-300 cursor-pointer active:scale-95 shadow-sm hover:shadow-md">
-                            <i data-lucide="moon" class="block w-6 h-6 mb-3 text-indigo-500 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1 group-active:rotate-12"></i>
-                            <span class="block text-slate-900 font-bold text-sm group-hover:text-indigo-600 transition-colors">Deeper Sleep</span>
-                        </div>
-
-                        <!-- Cognitive Clarity -->
-                        <div class="group p-4 bg-white rounded-xl border border-slate-100 hover:border-amber-300 transition-all duration-300 cursor-pointer active:scale-95 shadow-sm hover:shadow-md">
-                            <i data-lucide="zap" class="block w-6 h-6 mb-3 text-amber-500 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1 group-active:rotate-12"></i>
-                            <span class="block text-slate-900 font-bold text-sm group-hover:text-amber-600 transition-colors">Cognitive Clarity</span>
-                        </div>
-
-                        <!-- Faster Recovery -->
-                        <div class="group p-4 bg-white rounded-xl border border-slate-100 hover:border-red-300 transition-all duration-300 cursor-pointer active:scale-95 shadow-sm hover:shadow-md">
-                            <i data-lucide="activity" class="block w-6 h-6 mb-3 text-red-500 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1 group-active:rotate-12"></i>
-                            <span class="block text-slate-900 font-bold text-sm group-hover:text-red-600 transition-colors">Faster Recovery</span>
-                        </div>
-
-                        <!-- Stable Mood -->
-                        <div class="group p-4 bg-white rounded-xl border border-slate-100 hover:border-sky-300 transition-all duration-300 cursor-pointer active:scale-95 shadow-sm hover:shadow-md">
-                            <i data-lucide="smile" class="block w-6 h-6 mb-3 text-sky-500 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1 group-active:rotate-12"></i>
-                            <span class="block text-slate-900 font-bold text-sm group-hover:text-sky-600 transition-colors">Stable Mood</span>
-                        </div>
-
-                        <!-- Extended Healthspan -->
-                        <div class="group p-4 bg-white rounded-xl border border-slate-100 hover:border-green-300 transition-all duration-300 cursor-pointer active:scale-95 shadow-sm hover:shadow-md">
-                            <i data-lucide="infinity" class="block w-6 h-6 mb-3 text-green-500 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1 group-active:rotate-12"></i>
-                            <span class="block text-slate-900 font-bold text-sm group-hover:text-green-600 transition-colors">Healthy Lifespan</span>
-                        </div>
-
-                        <!-- Physical Resilience -->
-                        <div class="group p-4 bg-white rounded-xl border border-slate-100 hover:border-purple-300 transition-all duration-300 cursor-pointer active:scale-95 shadow-sm hover:shadow-md">
-                            <i data-lucide="dumbbell" class="block w-6 h-6 mb-3 text-purple-500 transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1 group-active:rotate-12"></i>
-                            <span class="block text-slate-900 font-bold text-sm group-hover:text-purple-600 transition-colors">Physical Resilience</span>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
+    <footer class="site-foot">
+        <div class="wrap mono">
+            <span>10X Vital Intelligence</span>
+            <a href="mailto:jad@superfoundry.dev">jad@superfoundry.dev</a>
         </div>
+    </footer>
 
-        <!-- Roadmap / Implementation -->
-        <section id="vision" class="py-24 relative overflow-hidden bg-white">
-            <!-- Background Decoration -->
-            <div class="absolute top-1/2 left-0 -translate-y-1/2 w-96 h-96 bg-orange-100 rounded-full blur-3xl -z-10 opacity-50"></div>
-            <div class="absolute bottom-0 right-0 w-full h-px bg-slate-100"></div>
-
-            <div class="max-w-7xl mx-auto px-6">
-                <div class="text-center mb-16 reveal">
-                    <span class="text-orange-500 font-mono text-sm tracking-widest uppercase mb-2 block font-bold">How the Paradigm Unfolds</span>
-                    <h2 class="text-4xl font-bold font-display mb-6 text-slate-900">The Path</h2>
-                    <p class="text-slate-600 max-w-3xl mx-auto text-lg leading-relaxed">
-                        In its full form, the paradigm reaches every place where people live, work, heal and rest. Homes, wearables, clinics, hospitals and wellness centers can all be connected by the same learning loop.
-                    </p>
-                </div>
-
-                <div class="grid lg:grid-cols-2 gap-16 items-center">
-                    
-                    <!-- Left Column: Visual Representation -->
-                    <div class="relative reveal flex items-center justify-center min-h-[350px] sm:min-h-[400px]">
-                        <!-- Visual Container -->
-                        <div class="relative w-full max-w-[340px] sm:max-w-[420px] lg:max-w-[500px] aspect-square flex items-center justify-center select-none pointer-events-none">
-                            
-                            <!-- Connecting Lines -->
-                            <div class="absolute inset-0 bg-gradient-to-tr from-orange-100 to-sky-100 rounded-full blur-2xl"></div>
-
-                            <!-- Outer Ring -->
-                            <div class="absolute inset-2 sm:inset-4 border border-slate-200 rounded-full"></div>
-                            <div class="absolute inset-2 sm:inset-4 border border-slate-300 rounded-full border-dashed animate-[spin_60s_linear_infinite] opacity-50"></div>
-
-                            <!-- Inner Ring -->
-                            <div class="absolute inset-20 sm:inset-28 border border-slate-200 rounded-full"></div>
-
-                            <!-- CENTER: The Home -->
-                            <div class="z-30 flex flex-col items-center justify-center bg-white border border-orange-200 p-6 sm:p-8 rounded-full shadow-lg relative group">
-                                <div class="absolute inset-0 bg-orange-50 rounded-full animate-pulse"></div>
-                                <i data-lucide="home" class="w-8 h-8 sm:w-10 sm:h-10 text-orange-500 relative z-10"></i>
-                                <span class="absolute -bottom-6 sm:-bottom-8 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-orange-600 whitespace-nowrap">The Home</span>
-                            </div>
-
-                            <!-- LAYER 2: Critical Zones -->
-                            <div class="absolute top-[22%] left-[22%] sm:top-[25%] sm:left-[25%] flex flex-col items-center z-20 group">
-                                <div class="bg-white p-2 sm:p-3 rounded-full border border-indigo-100 shadow-md group-hover:border-indigo-400 transition-colors">
-                                    <i data-lucide="bed-double" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500"></i>
-                                </div>
-                                <span class="text-[9px] sm:text-[10px] text-indigo-600/70 mt-1 sm:mt-2 font-mono uppercase tracking-wide bg-white/80 px-2 py-0.5 rounded backdrop-blur-md border border-slate-100">Bedroom</span>
-                            </div>
-
-                            <div class="absolute bottom-[22%] right-[22%] sm:bottom-[25%] sm:right-[25%] flex flex-col items-center z-20 group">
-                                <div class="bg-white p-2 sm:p-3 rounded-full border border-indigo-100 shadow-md group-hover:border-indigo-400 transition-colors">
-                                    <i data-lucide="droplets" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500"></i>
-                                </div>
-                                <span class="text-[9px] sm:text-[10px] text-indigo-600/70 mt-1 sm:mt-2 font-mono uppercase tracking-wide bg-white/80 px-2 py-0.5 rounded backdrop-blur-md border border-slate-100">Bathroom</span>
-                            </div>
-
-                            <!-- LAYER 3: Outward Expansion -->
-                            <div class="absolute top-[12%] right-[12%] sm:top-[10%] sm:right-[10%] flex flex-col items-center z-20 group">
-                                <div class="bg-white p-2 sm:p-3 rounded-full border border-sky-100 shadow-md group-hover:border-sky-400 transition-colors">
-                                    <i data-lucide="watch" class="w-4 h-4 sm:w-5 sm:h-5 text-sky-500"></i>
-                                </div>
-                                <span class="text-[9px] sm:text-[10px] text-sky-600/70 mt-1 sm:mt-2 font-mono uppercase tracking-wide bg-white/80 px-2 py-0.5 rounded backdrop-blur-md border border-slate-100">Wearables</span>
-                            </div>
-
-                            <div class="absolute top-1/2 left-[8%] sm:left-[2%] -translate-y-1/2 flex flex-col items-center z-20 group">
-                                <div class="bg-white p-2 sm:p-3 rounded-full border border-sky-100 shadow-md group-hover:border-sky-400 transition-colors">
-                                    <i data-lucide="stethoscope" class="w-4 h-4 sm:w-5 sm:h-5 text-sky-500"></i>
-                                </div>
-                                <span class="text-[9px] sm:text-[10px] text-sky-600/70 mt-1 sm:mt-2 font-mono uppercase tracking-wide bg-white/80 px-2 py-0.5 rounded backdrop-blur-md border border-slate-100">Clinics</span>
-                            </div>
-
-                            <div class="absolute bottom-[10%] sm:bottom-[5%] left-1/2 -translate-x-1/2 flex flex-col items-center z-20 group">
-                                <div class="bg-white p-2 sm:p-3 rounded-full border border-sky-100 shadow-md group-hover:border-sky-400 transition-colors">
-                                    <i data-lucide="building-2" class="w-4 h-4 sm:w-5 sm:h-5 text-sky-500"></i>
-                                </div>
-                                <span class="text-[9px] sm:text-[10px] text-sky-600/70 mt-1 sm:mt-2 font-mono uppercase tracking-wide bg-white/80 px-2 py-0.5 rounded backdrop-blur-md border border-slate-100">Hospitals</span>
-                            </div>
-
-                        </div>
-                    </div>
-
-                    <!-- Right Column: Clean Text -->
-                    <div class="space-y-8 reveal delay-200">
-                        <!-- Block 1 -->
-                        <div class="group relative pl-8 border-l-2 border-slate-200 hover:border-orange-500 transition-colors duration-300">
-                            <h3 class="text-xl font-bold text-slate-900 mb-2 group-hover:text-orange-500 transition-colors">Beginning at Home</h3>
-                            <p class="text-slate-600 leading-relaxed text-sm">
-                                The home is the natural starting point. People spend most of their time there, the body does much of its repair during sleep, and continuous contact with the body is easy to keep up. It is also where health gets the least support today.
-                            </p>
-                        </div>
-                        <!-- Block 2 -->
-                        <div class="group relative pl-8 border-l-2 border-slate-200 hover:border-indigo-500 transition-colors duration-300">
-                            <h3 class="text-xl font-bold text-slate-900 mb-2 group-hover:text-indigo-500 transition-colors">Two Rooms First</h3>
-                            <p class="text-slate-600 leading-relaxed text-sm">
-                                Within the home, two spaces matter most. The bathroom is rich in metabolic signals that can be read without any effort from the person. The bedroom is where sleep happens, and sleep is the body's deepest repair process. Sensors for these rooms can be built from scratch or added to fixtures people already have.
-                            </p>
-                        </div>
-                        <!-- Block 3 -->
-                        <div class="group relative pl-8 border-l-2 border-slate-200 hover:border-sky-500 transition-colors duration-300">
-                            <h3 class="text-xl font-bold text-slate-900 mb-2 group-hover:text-sky-500 transition-colors">Reaching Outward</h3>
-                            <p class="text-slate-600 leading-relaxed text-sm">
-                                From the home, the same loop can extend to wearables that travel with a person, to clinics and hospitals that gain a continuous picture of each patient, and to wellness settings built for renewal. The path covers all of these because vitality does not stop at the edge of any one setting. Home comes first because that is where the loop can do the most good with the least disruption to daily life.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- The Civilizational Imperative -->
-        <section id="imperative" class="py-24 bg-slate-50 relative">
-            <div class="absolute inset-0 bg-gradient-to-b from-white via-slate-50 to-white"></div>
-            <div class="max-w-7xl mx-auto px-6 relative z-10">
-                <div class="grid md:grid-cols-2 gap-16 items-center">
-                    <div class="reveal">
-                        <span class="text-orange-500 font-mono text-sm tracking-widest uppercase mb-2 block font-bold">The Economics</span>
-                        <h2 class="text-4xl md:text-5xl font-bold font-display mb-6 text-slate-900">The Civilizational Imperative</h2>
-                        <p class="text-xl text-slate-700 font-light mb-6">
-                            Getting this right would change how a whole civilization cares for its health.
-                        </p>
-                        <div class="space-y-6 text-slate-600 leading-relaxed">
-                            <p>
-                                Healthcare today is reactive and expensive, and it cannot keep growing the way it has. It waits for something to break, steps in at great cost, and manages decline instead of preventing it. Most of the money goes to the last years of life, after health has already failed, and very little goes to keeping people well along the way.
-                            </p>
-                            <p>
-                                <strong class="text-orange-600">The paradigm turns this around.</strong> If preventing decline costs less than managing it, the approach pays for itself. Money no longer spent on chronic disease, hospital stays and long-term prescriptions can go back into keeping people healthy.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="reveal delay-200">
-                        <div class="glass-card p-8 rounded-2xl border border-sky-100 relative overflow-hidden bg-white">
-                            <!-- Background Decoration -->
-                            <div class="absolute top-0 right-0 p-32 bg-sky-50 blur-3xl rounded-full pointer-events-none"></div>
-                            
-                            <!-- Content Wrapper -->
-                            <div class="relative z-10">
-                                <h3 class="text-2xl font-bold text-slate-900 mb-4">&ldquo;Better Than Free&rdquo;</h3>
-                                <p class="text-slate-600 mb-8 text-sm leading-relaxed">
-                                    The money saved when disease is avoided should go back to the people whose health produced the savings, as a health dividend. Then vitality is something everyone can afford, and taking part costs less than nothing.
-                                </p>
-
-                                <div class="flex items-center space-x-4 p-4 bg-sky-50 rounded-lg border border-sky-100 mb-4">
-                                    <div class="bg-white p-2 rounded-full shadow-sm">
-                                        <i data-lucide="scale" class="w-6 h-6 text-sky-500"></i>
-                                    </div>
-                                    <div>
-                                        <div class="text-xs text-slate-500 uppercase tracking-wide font-semibold">Outcome</div>
-                                        <div class="text-slate-900 font-bold">Vitality as a Right</div>
-                                    </div>
-                                </div>
-                                
-                                <p class="text-xs text-slate-500 italic mt-4">
-                                    This becomes possible once keeping people well costs less than treating them when they are sick.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- FAQ / Hard Questions -->
-        <section id="faq" class="py-24 bg-white border-y border-slate-100">
-            <div class="max-w-4xl mx-auto px-6">
-                <h2 class="text-3xl font-bold font-display mb-12 text-center text-slate-900">Addressing the Hard Questions</h2>
-                
-                <div class="space-y-6">
-                    <!-- Safety -->
-                    <div class="reveal">
-                        <h3 class="text-xl font-bold text-slate-900 mb-2">&ldquo;Is it safe?&rdquo;</h3>
-                        <p class="text-slate-600 text-sm leading-relaxed">
-                            It is built around four rules. It acts only for the benefit of the person it is working with, and it learns from the results of those actions. It never tries something on a person just to see what happens. Every action stays inside fixed limits that the intelligence cannot change, and the less sure it is about a response, the less it does.
-                        </p>
-                    </div>
-                    <!-- Q1 -->
-                    <div class="reveal">
-                        <h3 class="text-xl font-bold text-slate-900 mb-2">&ldquo;Won't this cause overpopulation?&rdquo;</h3>
-                        <p class="text-slate-600 text-sm leading-relaxed">
-                            Longer lives make the population grow slowly and steadily, without the runaway growth people tend to imagine. The bigger question is whether we live sustainably, at any lifespan. And the gain is large. Scientists would get to finish their work, artists would reach mastery, and people would keep sharing what they have learned for far longer.
-                        </p>
-                    </div>
-                    <!-- Q2 -->
-                    <div class="reveal">
-                        <h3 class="text-xl font-bold text-slate-900 mb-2">&ldquo;Death gives life meaning.&rdquo;</h3>
-                        <p class="text-slate-600 text-sm leading-relaxed">
-                            That belief has helped people accept a decline that, until now, no one could avoid. Meaning can also come from what people create and choose to do, and from having enough time to go deeply into it. Experience can be precious without the threat of its ending.
-                        </p>
-                    </div>
-                    <!-- Q3 -->
-                    <div class="reveal">
-                        <h3 class="text-xl font-bold text-slate-900 mb-2">&ldquo;Is this only for the rich?&rdquo;</h3>
-                        <p class="text-slate-600 text-sm leading-relaxed">
-                            It should not be. When avoiding disease costs less than managing it, the savings can be returned to people as a health dividend. Vitality then becomes an investment that pays people back, and everyone can take part.
-                        </p>
-                    </div>
-                    <!-- Q4 -->
-                    <div class="reveal">
-                        <h3 class="text-xl font-bold text-slate-900 mb-2">&ldquo;Are you trying to make people immortal?&rdquo;</h3>
-                        <p class="text-slate-600 text-sm leading-relaxed">
-                            The goal is to give people a choice about how their lives continue. We imagine that a person could one day make a voluntary transition to new forms of existence and consciousness, which we call graduation, at a time of their own choosing. Today that change is forced on people when their bodies fail.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- CTA / Footer -->
-        <section id="contact" class="py-32 relative text-center overflow-hidden bg-slate-50">
-            <div class="absolute inset-0 bio-grid-bg opacity-40"></div>
-            <div class="relative z-10 max-w-3xl mx-auto px-6">
-                <h2 class="text-5xl md:text-7xl font-bold font-display mb-8 text-slate-900">An Invitation</h2>
-                <div class="text-lg text-slate-600 mb-10 leading-relaxed mx-auto space-y-6 text-pretty">
-                    <p>
-                        This paradigm is larger than any one organization. It could be carried forward by companies, by university research labs, by non-profits or by government-funded research, and most likely by several of them working together.
-                    </p>
-                    <p>
-                        If you want to help develop it, as a person or as an organization, in any of those forms or in one we have not thought of, we would like to hear from you.
-                    </p>
-                    <p class="text-orange-500 font-bold text-xl">
-                        Write to us and tell us how you would like to help.
-                    </p>
-                </div>
-                
-                <a href="mailto:jad@superfoundry.dev" class="inline-block text-2xl md:text-4xl font-bold font-display text-slate-900 hover:text-orange-500 transition-colors border-b-2 border-orange-300 hover:border-orange-500 pb-1 break-all">jad@superfoundry.dev</a>
-                <p class="mt-10 text-xs text-slate-400">10X Vital Intelligence © 2026</p>
-            </div>
-        </section>
-
-    </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
-
-            function reveal() {
-                var reveals = document.querySelectorAll(".reveal");
-                for (var i = 0; i < reveals.length; i++) {
-                    var windowHeight = window.innerHeight;
-                    var elementTop = reveals[i].getBoundingClientRect().top;
-                    var elementVisible = 150;
-                    if (elementTop < windowHeight - elementVisible) {
-                        reveals[i].classList.add("active");
-                    }
-                }
-            }
-            window.addEventListener("scroll", reveal);
-            setInterval(reveal, 1000);
-            reveal();
-
-            const updateNavbar = () => {
-                const navbar = document.getElementById('navbar');
-                const scrolled = window.scrollY > 50;
-                if (scrolled) {
-                    navbar.classList.add('shadow-sm');
-                } else {
-                    navbar.classList.remove('shadow-sm');
-                }
-            };
-            window.addEventListener('scroll', updateNavbar);
-
-            // Mobile Menu
-            const menuBtn = document.getElementById('mobile-menu-btn');
-            const mobileMenu = document.getElementById('mobile-menu');
-            if (menuBtn && mobileMenu) {
-                const toggleMenu = (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    mobileMenu.classList.toggle('hidden');
-                };
-                menuBtn.addEventListener('click', toggleMenu);
-                menuBtn.addEventListener('touchstart', toggleMenu, { passive: false });
-                document.addEventListener('click', (e) => {
-                    if (!menuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
-                        mobileMenu.classList.add('hidden');
-                    }
-                });
-                const menuLinks = mobileMenu.querySelectorAll('a');
-                menuLinks.forEach(link => {
-                    link.addEventListener('click', () => {
-                        mobileMenu.classList.add('hidden');
-                    });
-                });
-            }
-
-            // 3D Three.js Animation - Bio-Energy Flow (Plasma/Nebula)
-            const container = document.getElementById('hero-canvas');
-            if (container) {
-                const scene = new THREE.Scene();
-
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.z = 25;
-                camera.position.y = 5;
-
-                const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-                renderer.setSize(container.clientWidth, container.clientHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
-                container.appendChild(renderer.domElement);
-
-                // Helper to create soft glow texture programmatically
-                function getTexture() {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 32;
-                    canvas.height = 32;
-                    const context = canvas.getContext('2d');
-                    const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
-                    gradient.addColorStop(0, 'rgba(255,255,255,1)');
-                    gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
-                    gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
-                    gradient.addColorStop(1, 'rgba(255,255,255,0)');
-                    context.fillStyle = gradient;
-                    context.fillRect(0,0,32,32);
-                    const texture = new THREE.Texture(canvas);
-                    texture.needsUpdate = true;
-                    return texture;
-                }
-
-                const particleCount = 2500;
-                const geometry = new THREE.BufferGeometry();
-                const positions = new Float32Array(particleCount * 3);
-                const colors = new Float32Array(particleCount * 3);
-                
-                // Color Palette
-                const colorPalette = [
-                    new THREE.Color(0xf97316), // Vitality Orange
-                    new THREE.Color(0xffd700), // Solar Gold
-                    new THREE.Color(0x0ea5e9)  // Electric Blue
-                ];
-
-                for (let i = 0; i < particleCount; i++) {
-                    const x = (Math.random() - 0.5) * 120;
-                    const y = (Math.random() - 0.5) * 40;
-                    const z = (Math.random() - 0.5) * 60;
-                    positions[i * 3] = x;
-                    positions[i * 3 + 1] = y;
-                    positions[i * 3 + 2] = z;
-
-                    // Assign random color from palette
-                    const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
-                    colors[i * 3] = color.r;
-                    colors[i * 3 + 1] = color.g;
-                    colors[i * 3 + 2] = color.b;
-                }
-
-                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-                const material = new THREE.PointsMaterial({
-                    size: 1.2, // Larger size for soft glow
-                    map: getTexture(),
-                    vertexColors: true,
-                    transparent: true,
-                    opacity: 0.9,
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false
-                });
-
-                const particles = new THREE.Points(geometry, material);
-                scene.add(particles);
-
-                window.addEventListener('resize', () => {
-                    const width = container.clientWidth;
-                    const height = container.clientHeight;
-                    camera.aspect = width / height;
-                    camera.updateProjectionMatrix();
-                    renderer.setSize(width, height);
-                });
-
-                let time = 0;
-                function animate() {
-                    requestAnimationFrame(animate);
-                    time += 0.003;
-
-                    // Rotate the whole system slightly
-                    particles.rotation.y = time * 0.05;
-
-                    const positions = particles.geometry.attributes.position.array;
-                    for (let i = 0; i < particleCount; i++) {
-                        const x = positions[i * 3];
-                        const z = positions[i * 3 + 2];
-                        
-                        // Organic Wave Motion (Vitality Flow)
-                        // Using multiple sines to create a complex, "breathing" motion
-                        positions[i * 3 + 1] += Math.sin(time * 2 + x * 0.1) * 0.02 + 
-                                                Math.cos(time * 1.5 + z * 0.1) * 0.02;
-                    }
-                    particles.geometry.attributes.position.needsUpdate = true;
-                    renderer.render(scene, camera);
-                }
-                animate();
-            }
-        });
-    </script>
 </body>
 </html>

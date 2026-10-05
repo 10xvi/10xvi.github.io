@@ -1,0 +1,12 @@
+/* hero-field (light): a living tissue of cells behind the hero and the closing
+   invitation. The page positions the canvas; this file only sizes and fades it. */
+canvas[data-widget="hero-field"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transition: opacity 1.8s cubic-bezier(.22, .61, .36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  canvas[data-widget="hero-field"] { transition: none; }
+}
