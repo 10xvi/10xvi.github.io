@@ -223,18 +223,23 @@ html.menu-open .nav::after { opacity: 0; }
 .hero-in { position: relative; z-index: 2; width: 100%; padding-top: 128px; padding-bottom: 120px; }
 .hero h1 { font-family: var(--display); font-weight: 700; color: var(--head); font-size: clamp(3.25rem, 8.4vw, 8rem); line-height: .92; letter-spacing: -.045em; }
 .hero h1 .x, .hero h1 .y { display: block; }
-/* The 10X breathes, as on the original site and with its colours: it rests on orange, then slowly
-   breathes out to orange, green and blue across the letters (never all blue), and back. 12s per breath,
-   sine-eased so it lingers at each end. Still (reduced motion): orange. */
-.hero h1 .gradient-text {
-  width: fit-content;
-  background: linear-gradient(to right, #f97316, #f59e0b, #0ea5e9);
-  background-size: 200% auto; background-position: 0% 50%;
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  animation: x-shift 12s cubic-bezier(.37, 0, .63, 1) infinite;
+/* The 10X animation, copied exactly from the original page: the same gradient, size and 6s
+   back-and-forth slide. Used by the hero 10X and the 10X on the Healthy Lifespan card.
+   Still (reduced motion): orange. */
+@keyframes gradient-x {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
-@keyframes x-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-html.gate-locked .hero h1 .gradient-text { animation-play-state: paused; }
+.gradient-text {
+  background: linear-gradient(to right, #f97316, #f59e0b, #0ea5e9);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% auto;
+  animation: gradient-x 6s linear infinite;
+}
+.hero h1 .gradient-text { width: fit-content; }
+html.gate-locked .gradient-text { animation-play-state: paused; }
 .hero p { max-width: 540px; margin-top: 32px; font-size: clamp(1.125rem, 1.45vw, 1.3125rem); line-height: 1.6; color: var(--text); text-wrap: pretty; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
 .actions .cta { padding: 15px 28px; font-size: 1rem; }
@@ -243,7 +248,7 @@ html.gate-locked .hero h1 .gradient-text { animation-play-state: paused; }
 /* Entrance after the gate: the type leads, the field settles in behind it (site.js adds html.hero-enter). */
 @keyframes hero-rise { from { opacity: 0; transform: translateY(14px); } }
 @keyframes hero-fade { from { opacity: 0; } }
-html.hero-enter .hero h1 .x { animation: hero-rise var(--dur-4) var(--ease-out) both, x-shift 12s cubic-bezier(.37, 0, .63, 1) infinite; }
+html.hero-enter .hero h1 .x { animation: hero-rise var(--dur-4) var(--ease-out) both, gradient-x 6s linear infinite; }
 html.hero-enter .hero h1 .y { animation: hero-rise var(--dur-4) var(--ease-out) 70ms both; }
 html.hero-enter .hero p { animation: hero-rise var(--dur-4) var(--ease-out) 140ms both; }
 html.hero-enter .hero .actions { animation: hero-rise var(--dur-4) var(--ease-out) 210ms both; }
@@ -304,7 +309,7 @@ h3.mid { font-family: var(--display); font-weight: 700; color: var(--head); font
 .goal.b::before { background: linear-gradient(90deg, var(--sky), var(--blue)); }
 .goal .tag { display: flex; justify-content: space-between; color: var(--muted); }
 .goal .fig { font-family: var(--display); font-weight: 700; font-size: clamp(5.25rem, 10vw, 9.5rem); line-height: .9; letter-spacing: -.06em; margin: 32px 0 14px; }
-.goal.a .fig { background: linear-gradient(90deg, var(--orange), var(--amber)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.goal.a .fig .gradient-text { display: inline-block; }
 .goal.b .fig { background: linear-gradient(90deg, var(--sky-deep), var(--sky)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .goal h3 { font-family: var(--display); font-weight: 700; color: var(--head); font-size: var(--h-l); letter-spacing: -.025em; line-height: 1.15; }
 .goal p { margin-top: 14px; max-width: 52ch; text-wrap: pretty; }
@@ -630,7 +635,7 @@ html:not(.js) [data-motion-toggle] { display: none; }
   .js .reveal, .js .head-grid.reveal > * { opacity: 1; transform: none; transition: none; }
   .skip, .mobile-menu.open, .mobile-menu.open.closing { transition: none; animation: none; }
   .hallmarks-head .warn::before { animation: none; }
-  .hero h1 .gradient-text { animation: none; }
+  .gradient-text { animation: none; }
   html.hero-enter .hero h1 .x, html.hero-enter .hero h1 .y, html.hero-enter .hero p, html.hero-enter .hero .actions, html.hero-enter .scroll-cue, html.hero-enter .nav-in { animation: none; }
   .cta:hover, .cta:active, .cta:focus-visible, .cta-ghost:hover svg, .menu-btn:active, .mobile-menu a.go:active, .motion-btn:active { transform: none; }
   .links a:not(.cta)::after, .nav, .nav::before, .nav::after, .where { transition: none; }
@@ -639,7 +644,7 @@ html.motion-paused { scroll-behavior: auto; }
 html.motion-paused.js .reveal, html.motion-paused.js .head-grid.reveal > * { opacity: 1; transform: none; transition: none; }
 html.motion-paused .skip, html.motion-paused .mobile-menu.open, html.motion-paused .mobile-menu.open.closing { transition: none; animation: none; }
 html.motion-paused .hallmarks-head .warn::before { animation: none; }
-html.motion-paused .hero h1 .gradient-text { animation-play-state: paused; }
+html.motion-paused .gradient-text { animation-play-state: paused; }
 html.motion-paused.hero-enter .hero h1 .x, html.motion-paused.hero-enter .hero h1 .y, html.motion-paused.hero-enter .hero p, html.motion-paused.hero-enter .hero .actions, html.motion-paused.hero-enter .scroll-cue, html.motion-paused.hero-enter .nav-in { animation: none; }
 html.motion-paused .cta:hover, html.motion-paused .cta:active, html.motion-paused .cta:focus-visible, html.motion-paused .cta-ghost:hover svg, html.motion-paused .menu-btn:active, html.motion-paused .mobile-menu a.go:active, html.motion-paused .motion-btn:active { transform: none; }
 html.motion-paused .links a:not(.cta)::after, html.motion-paused .nav, html.motion-paused .nav::before, html.motion-paused .nav::after, html.motion-paused .where { transition: none; }
