@@ -1,180 +1,170 @@
-/* particle-field: the original 10x.vi background, a soft field of orange, gold and sky
-   particles drifting in slow waves. Same field as the original page (2,500 particles,
-   the same camera, sizes, colours and motion), drawn with plain WebGL instead of Three.js.
-   It only runs while the visitor has chosen the original background (html.bg-original). */
+/* particle-field: the original 10x.vi background, copied exactly. The same Three.js r128 scene
+   as the original page: 2,500 orange, gold and sky points in the same box, the same camera,
+   sprite, material, slow turn and per-frame breathing waves. It runs only while the original
+   background is chosen (html.bg-original), after the password screen, while on screen and while
+   motion is allowed. Three.js is fetched only when this background is shown. */
 (function () {
   'use strict';
   var root = document.documentElement;
+  var THREE_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
   var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   function isLocked() { return root.classList.contains('gate-locked'); }
   function isStill() { return (mqReduce && mqReduce.matches) || root.classList.contains('motion-paused'); }
-  function isChosen() { return root.classList.contains('bg-original'); }
+  function isChosen() { return root.classList.contains('bg-original') && !root.classList.contains('no-webgl'); }
 
-  var PALETTE = [[0.976, 0.451, 0.086], [1.0, 0.843, 0.0], [0.055, 0.647, 0.914]]; /* #f97316 #ffd700 #0ea5e9 */
-  var SPEED = 0.18;      /* the original's calm pace: 0.003 per frame at 60 fps, held in real time so a faster display doesn't speed it up */
-  var SIZE = 1.2;        /* point size in world units, as in the original material */
-  var FOV = 75, NEAR = 0.1, FAR = 1000;
+  var threeLoad = null;
+  function loadThree() {
+    if (window.THREE) return Promise.resolve(window.THREE);
+    if (threeLoad) return threeLoad;
+    threeLoad = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = THREE_SRC;
+      s.async = true;
+      s.onload = function () { if (window.THREE) resolve(window.THREE); else reject(new Error('three.js missing')); };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    return threeLoad;
+  }
 
-  var VS = [
-    'attribute vec3 aPos;',
-    'attribute vec3 aCol;',
-    'uniform float uTime;',
-    'uniform float uSize;',
-    'uniform mat4 uProj;',
-    'varying vec3 vCol;',
-    'void main() {',
-    /* the original nudged y each frame by .02 * (sin(2t + .1x) + cos(1.5t + .1z)); this is that motion in closed form */
-    '  float y = aPos.y - 3.3333 * (cos(2.0 * uTime + 0.1 * aPos.x) - cos(0.1 * aPos.x))',
-    '                   + 4.4444 * (sin(1.5 * uTime + 0.1 * aPos.z) - sin(0.1 * aPos.z));',
-    '  float r = uTime * 0.05;',
-    '  float c = cos(r), s = sin(r);',
-    '  vec3 p = vec3(aPos.x * c + aPos.z * s, y, -aPos.x * s + aPos.z * c);',
-    '  vec4 v = vec4(p - vec3(0.0, 5.0, 25.0), 1.0);', /* camera at (0, 5, 25), looking down -z */
-    '  gl_Position = uProj * v;',
-    '  gl_PointSize = uSize / max(-v.z, 0.0001);',
-    '  vCol = aCol;',
-    '}'
-  ].join('\n');
-  var FS = [
-    'precision mediump float;',
-    'uniform float uOpacity;',
-    'varying vec3 vCol;',
-    'void main() {',
-    '  float d = length(gl_PointCoord - 0.5) * 2.0;',
-    '  if (d > 1.0) discard;',
-    /* the original sprite: 1 at the centre, .8 at .2, .2 at .5, 0 at the edge */
-    '  float a = d < 0.2 ? mix(1.0, 0.8, d / 0.2) : (d < 0.5 ? mix(0.8, 0.2, (d - 0.2) / 0.3) : mix(0.2, 0.0, (d - 0.5) / 0.5));',
-    '  gl_FragColor = vec4(vCol, a * uOpacity);',
-    '}'
-  ].join('\n');
+  /* no WebGL or no Three.js: keep the new background and hide the switch (focus moves to the pause switch beside it) */
+  function fallback() {
+    var f = document.activeElement;
+    if (f && f.hasAttribute && f.hasAttribute('data-bg-toggle')) {
+      var m = f.parentNode.querySelector('[data-motion-toggle]');
+      if (m) m.focus();
+    }
+    root.classList.add('no-webgl');
+  }
 
-  function rng(seed) {
-    return function () {
-      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
+  /* the original page's sprite, verbatim */
+  function getTexture(THREE) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    var context = canvas.getContext('2d');
+    var gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+    gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 32, 32);
+    var texture = new THREE.Texture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   function Field(cv) {
     var calm = cv.getAttribute('data-mode') === 'calm';
-    var COUNT = calm ? 1100 : 2500;
-    var OPACITY = calm ? 0.5 : 0.9;
-    var gl = null, prog = null, loc = {}, lost = false, failed = false;
-    var w = 0, h = 0, dpr = 1;
-    var visible = false, running = false, raf = 0, last = 0, t = 0, shownOnce = false;
+    /* the hero is the original field; the closing invitation gets a sparser, paler copy of it */
+    var particleCount = calm ? 1100 : 2500;
+    var opacity = calm ? 0.5 : 0.9;
+    var scene, camera, renderer, particles, ready = false, failed = false, pending = false;
+    var visible = false, running = false, raf = 0, time = 0, w = 0, h = 0, shownOnce = false;
 
-    function compile(type, src) {
-      var s = gl.createShader(type);
-      gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-      return s;
-    }
-    function setup() {
-      if (lost) return false;   /* wait for webglcontextrestored */
-      if (gl) return true;
-      if (failed) return false;
-      try {
-        gl = gl || cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: true, preserveDrawingBuffer: false }) ||
-          cv.getContext('experimental-webgl');
-        if (!gl) throw new Error('no webgl');
-        prog = gl.createProgram();
-        gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
-        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
-        gl.linkProgram(prog);
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-        gl.useProgram(prog);
-        ['uTime', 'uSize', 'uProj', 'uOpacity'].forEach(function (n) { loc[n] = gl.getUniformLocation(prog, n); });
-        var rand = rng(calm ? 7331 : 1337);
-        var data = new Float32Array(COUNT * 6);
-        for (var i = 0; i < COUNT; i++) {
-          var c = PALETTE[Math.floor(rand() * 3)];
-          data[i * 6] = (rand() - 0.5) * 120;
-          data[i * 6 + 1] = (rand() - 0.5) * 40;
-          data[i * 6 + 2] = (rand() - 0.5) * 60;
-          data[i * 6 + 3] = c[0]; data[i * 6 + 4] = c[1]; data[i * 6 + 5] = c[2];
-        }
-        var buf = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-        var aPos = gl.getAttribLocation(prog, 'aPos'), aCol = gl.getAttribLocation(prog, 'aCol');
-        gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 24, 0);
-        gl.enableVertexAttribArray(aCol); gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, 24, 12);
-        gl.uniform1f(loc.uOpacity, OPACITY);
-        gl.disable(gl.DEPTH_TEST);
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE); /* additive, like the original */
-        gl.clearColor(0, 0, 0, 0);
-        lost = false;
-        w = h = 0;
-        return true;
-      } catch (e) {
-        var transient = gl && gl.isContextLost && gl.isContextLost();
-        gl = null;
-        if (transient) return false; /* a lost context is temporary: try again when it is restored */
-        failed = true;
-        /* no WebGL here: keep the new background and hide the switch (focus moves to the pause switch beside it) */
-        var f = document.activeElement;
-        if (f && f.hasAttribute && f.hasAttribute('data-bg-toggle')) {
-          var m = f.parentNode.querySelector('[data-motion-toggle]');
-          if (m) m.focus();
-        }
-        root.classList.add('no-webgl');
-        return false;
+    function setup(THREE) {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+      camera.position.z = 25;
+      camera.position.y = 5;
+      renderer = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+
+      var geometry = new THREE.BufferGeometry();
+      var positions = new Float32Array(particleCount * 3);
+      var colors = new Float32Array(particleCount * 3);
+      var colorPalette = [
+        new THREE.Color(0xf97316), /* Vitality Orange */
+        new THREE.Color(0xffd700), /* Solar Gold */
+        new THREE.Color(0x0ea5e9)  /* Electric Blue */
+      ];
+      for (var i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 120;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 40;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+        var color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
       }
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      var material = new THREE.PointsMaterial({
+        size: 1.2,
+        map: getTexture(THREE),
+        vertexColors: true,
+        transparent: true,
+        opacity: opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      particles = new THREE.Points(geometry, material);
+      scene.add(particles);
+      ready = true;
     }
-    function size() {
+
+    function resize() {
       var r = cv.getBoundingClientRect();
       var cw = Math.round(r.width), ch = Math.round(r.height);
       if (!cw || !ch) return false;
-      var nd = Math.min(window.devicePixelRatio || 1, 2);
-      if (cw === w && ch === h && nd === dpr) return true;
-      w = cw; h = ch; dpr = nd;
-      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-      gl.viewport(0, 0, cv.width, cv.height);
-      var f = 1 / Math.tan(FOV * Math.PI / 360), a = w / h;
-      gl.uniformMatrix4fv(loc.uProj, false, new Float32Array([
-        f / a, 0, 0, 0,
-        0, f, 0, 0,
-        0, 0, (FAR + NEAR) / (NEAR - FAR), -1,
-        0, 0, (2 * FAR * NEAR) / (NEAR - FAR), 0
-      ]));
-      gl.uniform1f(loc.uSize, SIZE * dpr * h * 0.5); /* the original scaled points by half the canvas height */
+      if (cw === w && ch === h) return true;
+      w = cw; h = ch;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
       return true;
     }
-    function draw() {
-      if (!gl || lost) return;
-      gl.uniform1f(loc.uTime, t);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.POINTS, 0, COUNT);
+
+    /* the original page's animation step, verbatim: time advances 0.003 every frame */
+    function step() {
+      time += 0.003;
+      particles.rotation.y = time * 0.05;
+      var positions = particles.geometry.attributes.position.array;
+      for (var i = 0; i < particleCount; i++) {
+        var x = positions[i * 3];
+        var z = positions[i * 3 + 2];
+        positions[i * 3 + 1] += Math.sin(time * 2 + x * 0.1) * 0.02 +
+                                Math.cos(time * 1.5 + z * 0.1) * 0.02;
+      }
+      particles.geometry.attributes.position.needsUpdate = true;
+    }
+    function render() {
+      renderer.render(scene, camera);
       if (!shownOnce) { shownOnce = true; cv.classList.add('is-on'); }
     }
-    function frame(now) {
+    function animate() {
       raf = 0;
       if (!running) return;
-      var dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
-      last = now;
-      t += dt * SPEED;
-      draw();
-      raf = requestAnimationFrame(frame);
+      raf = requestAnimationFrame(animate);
+      step();
+      render();
     }
     function stop() {
-      running = false; last = 0;
+      running = false;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
     }
+
     function evaluate() {
       var active = isChosen() && !isLocked() && visible && !document.hidden;
       if (!active) { stop(); return; }
-      if (!setup() || !size()) { stop(); return; }
-      if (isStill()) { stop(); draw(); return; }
-      if (!running) { running = true; raf = requestAnimationFrame(frame); }
+      if (!ready) {
+        if (failed || pending) return;
+        pending = true;
+        loadThree().then(function (THREE) {
+          pending = false;
+          try { setup(THREE); } catch (e) { failed = true; fallback(); return; }
+          evaluate();
+        }, function () { pending = false; failed = true; fallback(); });
+        return;
+      }
+      if (!resize()) { stop(); return; }
+      if (isStill()) { stop(); render(); return; }
+      if (!running) { running = true; raf = requestAnimationFrame(animate); }
     }
     this.evaluate = evaluate;
 
-    cv.addEventListener('webglcontextlost', function (e) { e.preventDefault(); lost = true; stop(); });
-    cv.addEventListener('webglcontextrestored', function () { lost = false; gl = null; evaluate(); });
     if ('IntersectionObserver' in window) {
       new IntersectionObserver(function (es) { visible = es[es.length - 1].isIntersecting; evaluate(); }, { rootMargin: '80px 0px' }).observe(cv);
     } else { visible = true; }
@@ -182,7 +172,10 @@
       var rt = 0;
       new ResizeObserver(function () {
         clearTimeout(rt);
-        rt = setTimeout(function () { if (gl && !lost && size() && !running) { if (isChosen() && visible) draw(); } evaluate(); }, 120);
+        rt = setTimeout(function () {
+          if (ready && resize() && !running && isChosen() && visible && !isLocked()) render();
+          evaluate();
+        }, 120);
       }).observe(cv);
     } else {
       window.addEventListener('resize', evaluate);
@@ -199,6 +192,11 @@
       fields.push(nodes[i].__particleField);
     }
     evalAll();
+    /* fetch Three.js while the password screen is up, so the field is ready the moment it unlocks */
+    if (isChosen() && isLocked()) {
+      var idle = window.requestIdleCallback || function (f) { setTimeout(f, 200); };
+      idle(function () { loadThree().catch(function () {}); });
+    }
   }
   document.addEventListener('site:unlocked', evalAll);
   document.addEventListener('site:motion', evalAll);

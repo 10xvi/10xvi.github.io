@@ -649,7 +649,9 @@ html.motion-paused .links a:not(.cta)::after, html.motion-paused .nav, html.moti
 html:not(.bg-original) canvas[data-widget="particle-field"] { display: none; }
 html.bg-original canvas[data-widget="hero-field"] { display: none; }
 html.bg-original:not(.no-webgl) .hero { background: #fff; }
-html.bg-original:not(.no-webgl) .hero::after { background: radial-gradient(58% 64% at 27% 50%, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .55) 50%, rgba(255, 255, 255, 0) 82%), linear-gradient(0deg, #fff 0%, rgba(255, 255, 255, 0) 24%); }
+/* as on the original page, the field fades only toward the bottom; a soft white halo keeps the paragraph readable over it */
+html.bg-original:not(.no-webgl) .hero::after { background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 50%, #fff 100%); }
+html.bg-original:not(.no-webgl) .hero p { text-shadow: 0 0 14px #fff, 0 0 6px #fff, 0 0 2px #fff; }
 html:not(.js) [data-bg-toggle] { display: none; }
 [data-bg-toggle] svg { fill: none; stroke: currentColor; }
 [data-bg-toggle] .i-cells, [data-bg-toggle].is-original .i-orig { display: none; }

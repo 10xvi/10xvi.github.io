@@ -185,7 +185,8 @@
         document.documentElement.classList.add('js');
         // A visitor who paused the animations keeps them paused (read before any widget starts).
         try { if (localStorage.getItem('10x-motion') === 'paused') document.documentElement.classList.add('motion-paused'); } catch (e) {}
-        try { if (localStorage.getItem('10x-bg') === 'original') document.documentElement.classList.add('bg-original'); } catch (e) {}
+        /* the original particle background is the default; "new" switches to the cell field */
+        try { if (localStorage.getItem('10x-bg') !== 'new') document.documentElement.classList.add('bg-original'); } catch (e) { document.documentElement.classList.add('bg-original'); }
         document.addEventListener('site:unlocked', function () {
             setTimeout(function () {
                 if (window.__siteReady) return;

@@ -181,10 +181,7 @@
     }
     function setBg(o) {
         root.classList.toggle('bg-original', o);
-        try {
-            if (o) localStorage.setItem('10x-bg', 'original');
-            else localStorage.removeItem('10x-bg');
-        } catch (err) {}
+        try { localStorage.setItem('10x-bg', o ? 'original' : 'new'); } catch (err) {}
         syncBg();
         document.dispatchEvent(new CustomEvent('site:bg', { bubbles: true, detail: { original: o } }));
     }
