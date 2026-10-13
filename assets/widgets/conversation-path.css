@@ -108,6 +108,12 @@
   border-color: var(--orange, #f97316);
   box-shadow: 0 0 0 5px var(--orange-soft, #fff7ed);
 }
+.path.cpw-staged .stages li:nth-child(2)::after { border-color: var(--amber, #f59e0b); }
+.path.cpw-staged .stages li:nth-child(2).is-active::after {
+  background: var(--amber, #f59e0b);
+  border-color: var(--amber, #f59e0b);
+  box-shadow: 0 0 0 5px #fef3c7;
+}
 
 /* phones: the figure sits inline above the three stages (pinning it would cover half the screen).
    The canvas takes the full column, so the outer labels have room beside the rings. */
@@ -170,7 +176,8 @@
 /* forced colours: the stage being read keeps a visible fill */
 @media (forced-colors: active) {
   .path.cpw-staged .stages li.is-active::after,
-  .path.cpw-staged .stages li:first-child.is-active::after {
+  .path.cpw-staged .stages li:first-child.is-active::after,
+  .path.cpw-staged .stages li:nth-child(2).is-active::after {
     forced-color-adjust: none;
     background: Highlight;
     border-color: Highlight;

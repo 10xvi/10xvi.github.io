@@ -502,6 +502,9 @@ html.gate-locked .hallmarks-head .warn::before { animation-play-state: paused; }
 .stages li:first-child::after { background: var(--orange); border-color: var(--orange); box-shadow: 0 0 0 5px var(--orange-soft); }
 .stages .mono { display: block; color: var(--sky-ink); margin-bottom: 6px; font-size: 0.6875rem; }
 .stages li:first-child .mono { color: var(--orange-ink); }
+/* the three stages follow the 10X colours: home orange, spas and wearables amber, clinics and hospitals sky */
+.stages li:nth-child(2)::after { border-color: var(--amber); }
+.stages li:nth-child(2) .mono { color: var(--amber-ink); }
 .stages h3 { font-family: var(--display); font-weight: 700; font-size: var(--h-l); color: var(--head); letter-spacing: -.02em; margin-bottom: 8px; }
 .stages p { font-size: 1rem; max-width: 56ch; text-wrap: pretty; }
 @media (max-width: 960px) { .path { grid-template-columns: 1fr; } }

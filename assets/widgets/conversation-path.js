@@ -62,11 +62,12 @@
     // shared ink tokens for small text on white (AA)
     COL.orangeInk = parseColor(cs.getPropertyValue('--orange-ink'), [194, 65, 12]);
     COL.skyInk = parseColor(cs.getPropertyValue('--sky-ink'), [3, 105, 161]);
+    COL.amberInk = parseColor(cs.getPropertyValue('--amber-ink'), [180, 83, 9]);
     COL.white = [255, 255, 255];
     if (FC) {
       var ink = sysColor('CanvasText', [255, 255, 255]), cv = sysColor('Canvas', [0, 0, 0]),
         gray = sysColor('GrayText', [128, 128, 128]), hi = sysColor('Highlight', [26, 235, 255]);
-      COL.head = COL.text = COL.muted = COL.orangeInk = COL.skyInk = ink;
+      COL.head = COL.text = COL.muted = COL.orangeInk = COL.amberInk = COL.skyInk = ink;
       COL.line = COL.line2 = gray;
       COL.orange = COL.amber = COL.sky = COL.skyDeep = hi;
       COL.white = COL.bg = COL.orangeSoft = COL.skySoft = cv;
@@ -742,19 +743,24 @@
   };
 
   /* =====================================================================
-     B. PATH: home at the center, two rooms, then the wider settings
+     B. PATH: the home and its three rooms at the centre, then spas and wearables, then clinics and hospitals
      ===================================================================== */
+  // ring 1: the rooms of the home, ring 2: spas and wearables, ring 3: clinics and hospitals
   var PATH_NODES = [
     { t: 'Bedroom', ring: 1, ang: 180 },
     { t: 'Bathroom', ring: 1, ang: 0 },
-    { t: 'Wearables', ring: 2, ang: -128 },
-    { t: 'Clinics', ring: 2, ang: -52 },
-    { t: 'Hospitals', ring: 2, ang: 52 },
-    { t: 'Wellness centers', short: 'Wellness', ring: 2, ang: 128 }
+    { t: 'Kitchen', ring: 1, ang: -90 },
+    { t: 'Spas', ring: 2, ang: -140 },
+    { t: 'Wearables', ring: 2, ang: -40 },
+    { t: 'Clinics', ring: 3, ang: 135 },
+    { t: 'Hospitals', ring: 3, ang: 45 }
   ];
+  // the emphasis group of a ring, one per stage of the text: 0 the home and its rooms, 1 spas and wearables,
+  // 2 clinics and hospitals
+  function grp(ring) { return ring - 1; }
   var PERIOD = 7.4;
-  /* emphasis per group (0 the home, 1 the two rooms, 2 the wider settings) for each stage of the text */
-  var STAGE_EM = [[1, 0.5, 0.35], [0.7, 1, 0.35], [0.6, 0.6, 1]];
+  /* emphasis per group for each stage of the text */
+  var STAGE_EM = [[1, 0.45, 0.35], [0.65, 1, 0.4], [0.55, 0.6, 1]];
   var STAGE_INK = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   var EM_DUR = 0.4; // --dur-3
 
@@ -786,7 +792,7 @@
   var Path = {
     init: function (h) {
       var st = h.st;
-      st.t = 0.2; st.lit = PATH_NODES.map(function () { return 0; }); st.ringLit = [0, 0, 0]; st.home = 0.4;
+      st.t = 0.2; st.lit = PATH_NODES.map(function () { return 0; }); st.ringLit = [0, 0, 0, 0]; st.home = 0.4;
       st.returns = []; st.cycle = -1; st.fired = {};
       st.stage = st.stage || 0; st.emT = 1;
       st.em = STAGE_EM[st.stage].slice(); st.ink = STAGE_INK[st.stage].slice();
@@ -804,14 +810,16 @@
         return;
       }
       if (k === 0) st.home = 1;
-      for (var i = 0; i < st.nodes.length; i++) if (st.nodes[i].ring === k) st.lit[i] = 1;
-      if (k) st.ringLit[k] = 1;
+      for (var i = 0; i < st.nodes.length; i++) if (grp(st.nodes[i].ring) === k) st.lit[i] = 1;
+      st.ringLit[k + 1] = 1;
       kick();
     },
     // emphasis of the figure at a distance r from the centre
     zoneEm: function (st, r) {
       var e = st.em;
-      return r <= st.r1 ? lerp(e[0], e[1], smooth(st.rh, st.r1, r)) : lerp(e[1], e[2], smooth(st.r1, st.r2, r));
+      if (r <= st.r1) return e[0];
+      if (r <= st.r2) return lerp(e[0], e[1], smooth(st.r1 + 6, st.r2 - 6, r));
+      return lerp(e[1], e[2], smooth(st.r2 + 6, st.r3 - 6, r));
     },
     layout: function (h) {
       var st = h.st, W = h.w, H = h.h, S = Math.min(W, H), cx = W / 2, cy = H / 2;
@@ -821,9 +829,11 @@
       st.narrow = S < 480;
       st.ls = st.fs * (st.narrow ? 0.08 : 0.12);
       st.lh = st.fs + 4;
-      st.rh = clamp(S * 0.11, 42, 54);
-      st.r1 = S * 0.245;
-      st.r2 = S * 0.385;
+      st.rh = clamp(S * 0.105, 40, 52);
+      st.r1 = S * 0.215;
+      st.r2 = S * 0.315;
+      st.r3 = S * 0.415;
+      st.rings = [0, st.r1, st.r2, st.r3];
       st.rEdge = S * 0.5 - 4;
       var ctx = h.ctx, pad = 4;
       st.homeFs = S < 400 ? 14 : 16;
@@ -836,54 +846,41 @@
       var under = false;
       if (st.narrow) PATH_NODES.forEach(function (nd) {
         var a = nd.ang * Math.PI / 180;
-        if (nd.ring !== 2 || Math.sin(a) <= 0) return;
-        var x = cx + st.r2 * Math.cos(a), ax = x + Math.cos(a) * 15;
+        if (nd.ring !== 3 || Math.sin(a) <= 0) return;
+        var x = cx + st.r3 * Math.cos(a), ax = x + Math.cos(a) * 15;
         var avail = Math.cos(a) > 0 ? W - pad - ax : ax - pad;
         if (spacedWidth(ctx, nd.t.toUpperCase(), st.ls) > avail) under = true;
       });
       st.nodes = PATH_NODES.map(function (nd) {
-        var r = nd.ring === 1 ? st.r1 : st.r2, a = nd.ang * Math.PI / 180;
+        var r = st.rings[nd.ring], a = nd.ang * Math.PI / 180;
         var x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
         var lines = [nd.t.toUpperCase()];
         var tw = spacedWidth(ctx, lines[0], st.ls);
         var nr = nd.ring === 1 ? 6 : 5;
         var lx, ly, box, align = 'center', bh;
-        if (under && nd.ring === 2 && Math.sin(a) > 0) {
-          if (tw > W / 2 - 12 && lines[0].indexOf(' ') > 0) {
-            lines = lines[0].split(' ');
-            tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
-          }
-          bh = st.lh * (lines.length - 1);
+        if (under && nd.ring === 3 && Math.sin(a) > 0) {
+          bh = 0;
           lx = clamp(x, 8 + tw / 2, W - 8 - tw / 2);
           ly = y + nr + 14;
           box = [lx - tw / 2 - 5, ly - st.fs * 0.78 - 4, lx + tw / 2 + 5, ly + bh + st.fs * 0.22 + 4];
-        } else if (st.narrow && nd.ring === 2) {
+        } else if (st.narrow && nd.ring === 3) {
           // corner label: anchored on the diagonal 10px past the node, clear of the tick band,
           // left-aligned on the right side and right-aligned on the left side
           var right = Math.cos(a) > 0, up = Math.sin(a) < 0;
           var ax = x + Math.cos(a) * (nr + 10), ay = y + Math.sin(a) * (nr + 10);
-          var avail = right ? W - pad - ax : ax - pad;
-          if (tw > avail && lines[0].indexOf(' ') > 0) {
-            lines = lines[0].split(' ');
-            tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
-          }
-          bh = st.lh * (lines.length - 1);
+          bh = 0;
           var x0 = clamp(right ? ax : ax - tw, pad, W - pad - tw);
           align = right ? 'left' : 'right';
           lx = right ? x0 : x0 + tw;
-          // ly = baseline of the first line; upper labels rest on the anchor, lower ones hang from it
-          ly = up ? ay - bh - st.fs * 0.22 : ay + st.fs * 0.78;
-          box = [x0 - 5, ly - st.fs * 0.78 - 4, x0 + tw + 5, ly + bh + st.fs * 0.22 + 4];
+          // ly = baseline; upper labels rest on the anchor, lower ones hang from it
+          ly = up ? ay - st.fs * 0.22 : ay + st.fs * 0.78;
+          box = [x0 - 5, ly - st.fs * 0.78 - 4, x0 + tw + 5, ly + st.fs * 0.22 + 4];
         } else {
-          // on narrow figures, wrap a long label onto two lines instead of shrinking it
-          if (tw > S * 0.34 && lines[0].indexOf(' ') > 0) {
-            lines = lines[0].split(' ');
-            tw = Math.max(spacedWidth(ctx, lines[0], st.ls), spacedWidth(ctx, lines[1], st.ls));
-          }
-          var below = nd.ring === 1 || Math.sin(a) > 0;
+          // labels sit above the nodes in the upper part of the figure and below them elsewhere
+          var below = Math.sin(a) > -0.5;
           var gapY = nr + 13;
-          bh = st.lh * (lines.length - 1);
-          ly = below ? y + gapY + st.fs * 0.72 : y - gapY - bh;
+          bh = 0;
+          ly = below ? y + gapY + st.fs * 0.72 : y - gapY;
           lx = clamp(x, tw / 2 + pad, W - tw / 2 - pad);
           box = [lx - tw / 2 - 7, ly - st.fs * 0.78 - 5, lx + tw / 2 + 7, ly + bh + st.fs * 0.22 + 5];
         }
@@ -898,8 +895,8 @@
       // a still frame of the stage being read: its group lit, the rest at rest
       var k = st.stage || 0;
       st.t = 2.15; st.returns = [];
-      st.lit = PATH_NODES.map(function (nd) { return nd.ring === k ? 0.85 : 0.3; });
-      st.ringLit = [0.5, k === 1 ? 0.7 : 0.2, k === 2 ? 0.6 : 0.2]; st.home = k === 0 ? 0.8 : 0.4;
+      st.lit = PATH_NODES.map(function (nd) { return grp(nd.ring) === k ? 0.85 : 0.3; });
+      st.ringLit = [0, k === 0 ? 0.7 : 0.2, k === 1 ? 0.7 : 0.2, k === 2 ? 0.6 : 0.2]; st.home = k === 0 ? 0.8 : 0.4;
       st.em = STAGE_EM[k].slice(); st.ink = STAGE_INK[k].slice(); st.emT = 1;
       st.stillFront = true;
     },
@@ -909,11 +906,13 @@
       var e = 0.55 * u + 0.45 * easeInOut(u);
       return st.rh + e * (st.rEdge - st.rh);
     },
-    // colour by distance from the home: warm at the centre, sky further out
-    // (passes through a pale tone instead of a muddy orange/sky mix)
+    // colour by distance from the home, as in the 10X wordmark: orange in the home, amber at the spas and
+    // wearables, sky at the clinics and hospitals (amber to sky passes through a pale tone, never a muddy mix)
+    tintU: function (st, r) { return smooth(st.r1 + 6, st.r2 - 4, r); },
+    tintV: function (st, r) { return smooth(st.r2 + 6, st.r2 + (st.r3 - st.r2) * 0.6, r); },
     tint: function (st, r) {
-      var u = smooth(st.r1 + 6, st.r1 + (st.r2 - st.r1) * 0.55, r);
-      return u < 0.5 ? mix(COL.orange, COL.white, u * 1.2) : mix(COL.sky, COL.white, (1 - u) * 1.2);
+      var v = this.tintV(st, r);
+      return v < 0.5 ? mix(mix(COL.orange, COL.amber, this.tintU(st, r)), COL.white, v * 1.2) : mix(COL.sky, COL.white, (1 - v) * 1.2);
     },
     update: function (h, dt) {
       var st = h.st;
@@ -931,50 +930,59 @@
         var n = st.nodes[i];
         if (!st.fired[i] && rho >= n.r) {
           st.fired[i] = true; st.lit[i] = 1; st.ringLit[n.ring] = 1;
-          if (n.ring === 2) st.returns.push({ i: i, t0: st.t + 0.9 + i * 0.12, dur: 2.0 });
+          // what is learned out in the wider settings travels back to the home
+          if (n.ring >= 2) st.returns.push({ i: i, t0: st.t + 0.9 + i * 0.1, dur: 2.0 });
         }
         st.lit[i] = Math.max(0.0, st.lit[i] - dt / 3.4);
       }
-      for (i = 0; i < 3; i++) st.ringLit[i] = Math.max(0, st.ringLit[i] - dt / 1.6);
+      for (i = 0; i < 4; i++) st.ringLit[i] = Math.max(0, st.ringLit[i] - dt / 1.6);
       st.home = Math.max(0, st.home - dt / 2.2);
       for (i = st.returns.length - 1; i >= 0; i--) {
         var r = st.returns[i];
         if (st.t > r.t0 + r.dur) { st.returns.splice(i, 1); st.home = Math.max(st.home, 0.75); }
       }
     },
-    nodeCol: function (n) { return n.ring === 1 ? roomCol() : COL.sky; },
+    nodeCol: function (n) { return n.ring === 1 ? roomCol() : n.ring === 2 ? COL.amber : COL.sky; },
     // the glow under a tinted point: its palette colour at the alpha of its share of the tint
     // (the white share adds nothing on the light ground), so only palette sprites are ever used
     tintGlow: function (ctx, st, x, y, r, dist, a) {
-      var u = smooth(st.r1 + 6, st.r1 + (st.r2 - st.r1) * 0.55, dist);
-      if (u < 0.5) glowDot(ctx, x, y, r, COL.orange, a * (1 - u * 1.2));
-      else glowDot(ctx, x, y, r, COL.sky, a * (1 - (1 - u) * 1.2));
+      var v = this.tintV(st, dist);
+      if (v < 0.5) glowDot(ctx, x, y, r, this.tintU(st, dist) < 0.5 ? COL.orange : COL.amber, a * (1 - v * 1.2));
+      else glowDot(ctx, x, y, r, COL.sky, a * (1 - (1 - v) * 1.2));
     },
-    // static parts are baked once per layout: base (ground, rings, ticks, spokes) and top (discs, home, labels)
+    // static parts are baked once per layout, one layer per group, so the stage being read can be brought
+    // forward: base (ground, rings, ticks, spokes) and top (discs, home, labels)
     bake: function (h) {
       var st = h.st, cx = st.cx, cy = st.cy, sky = COL.sky, orange = COL.orange, i, n, ctx;
       var boxes = st.boxes, self = this;
-      // each group is baked on its own layer so the stage being read can be brought forward:
-      // the wider settings (full size), the two rooms and the home (cropped around the centre)
+      // the home's rooms are cropped around the centre; the two wider rings take the full size
       var rr = st.r1 + 26;
-      var baseOuter = makeLayer(h, 'baseOuter'), baseRooms = makeSprite(h, 'baseRooms', cx - rr, cy - rr, cx + rr, cy + rr);
-      ctx = baseOuter.ctx;
+      var base = [null, makeSprite(h, 'baseRooms', cx - rr, cy - rr, cx + rr, cy + rr), makeLayer(h, 'baseMid'), makeLayer(h, 'baseOuter')];
+      ctx = base[3].ctx;
       if (!FC) { // forced colours: no ground washes
-        var g0 = ctx.createRadialGradient(cx, cy, st.rh, cx, cy, st.r2 + 14);
+        var g0 = ctx.createRadialGradient(cx, cy, st.rh, cx, cy, st.r3 + 14);
         g0.addColorStop(0, rgba(sky, 0.02)); g0.addColorStop(0.75, rgba(sky, 0.055)); g0.addColorStop(1, rgba(sky, 0.0));
-        ctx.fillStyle = g0; ctx.beginPath(); ctx.arc(cx, cy, st.r2 + 14, 0, TAU); ctx.fill();
+        ctx.fillStyle = g0; ctx.beginPath(); ctx.arc(cx, cy, st.r3 + 14, 0, TAU); ctx.fill();
       }
-      maskedCircle(ctx, cx, cy, st.r2, boxes);
+      maskedCircle(ctx, cx, cy, st.r3, boxes);
       ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
       ctx.strokeStyle = rgba(COL.line2, 0.8); ctx.lineWidth = 1; ctx.beginPath();
       for (i = 0; i < 120; i++) {
-        var ta = i / 120 * TAU, r0 = st.r2 + 7, r1t = st.r2 + (i % 5 === 0 ? 12 : 10);
+        var ta = i / 120 * TAU, r0 = st.r3 + 7, r1t = st.r3 + (i % 5 === 0 ? 12 : 10);
         var tx0 = cx + r0 * Math.cos(ta), ty0 = cy + r0 * Math.sin(ta), tx1 = cx + r1t * Math.cos(ta), ty1 = cy + r1t * Math.sin(ta);
         if (inBoxes(boxes, tx0, ty0) || inBoxes(boxes, tx1, ty1)) continue;
         ctx.moveTo(tx0, ty0); ctx.lineTo(tx1, ty1);
       }
       ctx.stroke();
-      ctx = baseRooms.ctx;
+      ctx = base[2].ctx;
+      if (!FC) {
+        var gm = ctx.createRadialGradient(cx, cy, st.r1, cx, cy, st.r2 + 10);
+        gm.addColorStop(0, rgba(COL.amber, 0)); gm.addColorStop(0.8, rgba(COL.amber, 0.045)); gm.addColorStop(1, rgba(COL.amber, 0));
+        ctx.fillStyle = gm; ctx.beginPath(); ctx.arc(cx, cy, st.r2 + 10, 0, TAU); ctx.fill();
+      }
+      maskedCircle(ctx, cx, cy, st.r2, boxes);
+      ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
+      ctx = base[1].ctx;
       if (!FC) {
         var g1 = ctx.createRadialGradient(cx, cy, st.rh * 0.8, cx, cy, st.r1 + 8);
         g1.addColorStop(0, rgba(COL.amber, 0.1)); g1.addColorStop(0.85, rgba(COL.amber, 0.05)); g1.addColorStop(1, rgba(COL.amber, 0));
@@ -982,22 +990,22 @@
       }
       maskedCircle(ctx, cx, cy, st.r1, boxes);
       ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.line2, 1); ctx.stroke();
-      [baseRooms.ctx, baseOuter.ctx].forEach(function (c2) { c2.setLineDash([2, 4]); c2.lineWidth = 1; c2.strokeStyle = rgba(COL.muted, 0.5); });
+      for (i = 1; i < 4; i++) { ctx = base[i].ctx; ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(COL.muted, 0.5); }
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        ctx = n.ring === 1 ? baseRooms.ctx : baseOuter.ctx;
+        ctx = base[n.ring].ctx;
         ctx.beginPath();
         maskedSegment(ctx, cx + Math.cos(n.a) * (st.rh + 6), cy + Math.sin(n.a) * (st.rh + 6),
           n.x - Math.cos(n.a) * (n.nr + 5), n.y - Math.sin(n.a) * (n.nr + 5), boxes);
         ctx.stroke();
       }
-      baseRooms.ctx.setLineDash([]); baseOuter.ctx.setLineDash([]);
-      st.baseOuter = baseOuter; st.baseRooms = baseRooms;
+      for (i = 1; i < 4; i++) base[i].ctx.setLineDash([]);
+      st.base = base;
 
-      var topOuter = makeLayer(h, 'topOuter'), topRooms = makeSprite(h, 'topRooms', cx - rr, cy - rr, cx + rr, cy + rr);
+      var top = [null, makeSprite(h, 'topRooms', cx - rr, cy - rr, cx + rr, cy + rr), makeLayer(h, 'topMid'), makeLayer(h, 'topOuter')];
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        ctx = n.ring === 1 ? topRooms.ctx : topOuter.ctx;
+        ctx = top[n.ring].ctx;
         var nc = self.nodeCol(n);
         if (n.ring === 1) {
           ctx.beginPath(); ctx.arc(n.x, n.y, n.nr + 5, 0, TAU);
@@ -1009,7 +1017,7 @@
         noShadow(ctx);
         ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(nc, 1); ctx.stroke();
       }
-      st.topOuter = topOuter; st.topRooms = topRooms;
+      st.top = top;
       var hr = st.rh + 34, home = makeSprite(h, 'home', cx - hr, cy - hr, cx + hr, cy + hr); ctx = home.ctx;
       ctx.beginPath(); ctx.arc(cx, cy, st.rh, 0, TAU);
       softShadow(ctx, 18, 6, 0.12);
@@ -1033,9 +1041,10 @@
 
       // each label baked twice, slate and ink; lit labels cross-fade by alpha, never by channel mixing.
       // The held-back copy is a darker slate (--text, slate-600), so it stays AA even when its group is quiet.
+      var INK = [null, COL.orangeInk, COL.amberInk, COL.skyInk];
       st.labelSprites = st.nodes.map(function (nd, k) {
         var b = boxes[k], out = [];
-        [COL.text, nd.ring === 1 ? COL.orangeInk : COL.skyInk].forEach(function (col, v) {
+        [COL.text, INK[nd.ring]].forEach(function (col, v) {
           var sp = makeSprite(h, 'lbl' + k + '_' + v, b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2), c2 = sp.ctx;
           c2.font = '500 ' + st.fs + 'px ' + MONO; c2.textBaseline = 'alphabetic';
           c2.fillStyle = rgba(col, 1);
@@ -1050,17 +1059,18 @@
       var em = st.em;
       // forced colours: the held-back groups stay clearly drawn (the stage list carries the emphasis too)
       if (FC) em = em.map(function (e) { return 0.6 + 0.4 * e; });
-      // first view: the home is there at once, the rooms and the wider settings ease in around it
+      // first view: the home and its rooms are there at once, the wider settings ease in around them
       var ek = entK(h);
       if (ek < 1) em = [em[0], em[1] * ek, em[2] * ek];
       var tc = st.stillFront ? 2.15 : st.t - Math.floor(st.t / PERIOD) * PERIOD;
       var rho = this.front(st, tc);
 
-      blitLayer(h, ctx, st.baseOuter, em[2]);
-      blitLayer(h, ctx, st.baseRooms, em[1]);
+      blitLayer(h, ctx, st.base[3], em[2]);
+      blitLayer(h, ctx, st.base[2], em[1]);
+      blitLayer(h, ctx, st.base[1], em[0]);
 
       // trailing band of the propagating pulse (quieter where the figure is held back)
-      var fa = smooth(st.rh, st.rh + 20, rho) * (1 - smooth(st.r2 + 6, st.rEdge, rho)) * this.zoneEm(st, rho);
+      var fa = smooth(st.rh, st.rh + 20, rho) * (1 - smooth(st.r3 + 6, st.rEdge, rho)) * this.zoneEm(st, rho);
       var fc = this.tint(st, rho);
       if (fa > 0.01) {
         var inner = Math.max(st.rh, rho - st.S * 0.12);
@@ -1070,12 +1080,11 @@
       }
 
       // lit rings
-      var rings = [st.r1, st.r2];
-      for (i = 0; i < 2; i++) {
-        var rl = st.ringLit[i + 1] * em[i + 1];
+      for (i = 1; i < 4; i++) {
+        var rl = st.ringLit[i] * em[grp(i)];
         if (rl > 0.01) {
-          maskedCircle(ctx, cx, cy, rings[i], st.boxes);
-          ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(this.tint(st, rings[i]), 0.7 * rl); ctx.stroke();
+          maskedCircle(ctx, cx, cy, st.rings[i], st.boxes);
+          ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(this.tint(st, st.rings[i]), 0.7 * rl); ctx.stroke();
         }
       }
 
@@ -1119,7 +1128,7 @@
       // glows sit under the baked discs
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        if (st.lit[i] > 0.01) glowDot(ctx, n.x, n.y, n.nr + 16, this.nodeCol(n), 0.24 * st.lit[i] * em[n.ring]);
+        if (st.lit[i] > 0.01) glowDot(ctx, n.x, n.y, n.nr + 16, this.nodeCol(n), 0.24 * st.lit[i] * em[grp(n.ring)]);
       }
       var hm = st.home;
       glowDot(ctx, cx, cy, st.rh * 1.75, orange, (0.1 + 0.12 * hm) * em[0]);
@@ -1128,14 +1137,15 @@
         ctx.lineWidth = 1.25; ctx.strokeStyle = rgba(orange, 0.45 * hm * em[0]); ctx.stroke();
       }
 
-      blitLayer(h, ctx, st.topOuter, em[2]);
-      blitLayer(h, ctx, st.topRooms, em[1]);
+      blitLayer(h, ctx, st.top[3], em[2]);
+      blitLayer(h, ctx, st.top[2], em[1]);
+      blitLayer(h, ctx, st.top[1], em[0]);
       blitLayer(h, ctx, st.homeLayer, em[0]);
 
       // lit discs and labels
       for (i = 0; i < st.nodes.length; i++) {
         n = st.nodes[i];
-        var lit = st.lit[i], nc = this.nodeCol(n), ge = em[n.ring];
+        var lit = st.lit[i], nc = this.nodeCol(n), gi = grp(n.ring), ge = em[gi];
         ctx.globalAlpha = ge;
         if (lit > 0.01) {
           if (n.ring === 1) {
@@ -1149,7 +1159,7 @@
         ctx.globalAlpha = 1;
         // the active stage's labels hold their ink colour; the rest light up as the pulse passes.
         // Text is not held back with the drawing: its floor (slate-600 at .82 on the ground) is about 4.7:1.
-        var k = Math.max(smooth(0.22, 0.68, lit), st.ink[n.ring]), sp = st.labelSprites[i], la = 0.82 + 0.18 * ge;
+        var k = Math.max(smooth(0.22, 0.68, lit), st.ink[gi]), sp = st.labelSprites[i], la = 0.82 + 0.18 * ge;
         // the ink copy goes over the slate one; the slate's alpha is solved so the pair always covers
         // exactly la (two half-alpha copies would wash the label out mid-fade)
         var a1 = k > 0.005 ? k * la : 0;
